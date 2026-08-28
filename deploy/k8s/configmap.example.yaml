@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: llmaif-config, namespace: llmaif }
+data:
+  SPRING_PROFILES_ACTIVE: "prod"
+  ENTERPRISE_GIT_BASE_URL: "https://git.intra.example.com"
+  TOKEN_PLAN_BASE_URL: "http://maas-gateway.intra.example.com/compatible-mode/v1"

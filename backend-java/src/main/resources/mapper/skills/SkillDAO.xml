@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.company.llmaif.skills.dao.SkillDAO">
+
+    <!-- 基础列 -->
+    <sql id="baseColumn">
+        id, name, description, runtime, git_repo_path, current_version, draft_revision,
+        status, visibility, entry_file, creator_id, is_deleted, create_time, update_time
+    </sql>
+
+    <!-- 根据名称查询 -->
+    <select id="selectByName" resultType="com.company.llmaif.skills.dao.entity.SkillEntity">
+        SELECT <include refid="baseColumn"/>
+        FROM `skill`
+        WHERE name = #{name} AND is_deleted = 0
+    </select>
+
+    <!-- 查询用户的 Skill 列表 -->
+    <select id="selectByCreatorId" resultType="com.company.llmaif.skills.dao.entity.SkillEntity">
+        SELECT <include refid="baseColumn"/>
+        FROM `skill`
+        WHERE creator_id = #{creatorId} AND is_deleted = 0
+        ORDER BY create_time DESC
+    </select>
+
+    <!-- 根据状态查询 -->
+    <select id="selectByStatus" resultType="com.company.llmaif.skills.dao.entity.SkillEntity">
+        SELECT <include refid="baseColumn"/>
+        FROM `skill`
+        WHERE status = #{status} AND is_deleted = 0
+        ORDER BY update_time DESC
+    </select>
+
+</mapper>

@@ -1,0 +1,112 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /race-api
+
+spring:
+  application:
+    name: llmaif-backend
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+
+  # TDSQL 数据源（MySQL 兼容）
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:tdsql:mysql://127.0.0.1:3306/llmaif?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+    username: root
+    password: root
+    type: org.apache.tomcat.jdbc.pool.DataSource
+    tomcat:
+      initial-size: 5
+      max-active: 50
+      max-idle: 20
+      min-idle: 5
+      test-while-idle: true
+      validation-query: SELECT 1
+
+  # Redis
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    database: 0
+    timeout: 3000ms
+    lettuce:
+      pool:
+        max-active: 16
+        max-idle: 8
+        min-idle: 2
+
+  # 文件上传
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 200MB
+
+  # Jackson
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    default-property-inclusion: non_null
+
+# MyBatis-Plus
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-aliases-package: com.company.llmaif.*.dao.entity
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: isDeleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+      table-underline: true
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: false
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# 自定义业务配置
+llmaif:
+  jwt:
+    secret: llmaif-secret-key-2026-please-change-in-production-xxxxxxxxxxxx
+    expire-ms: 86400000  # 24 小时
+    header: Authorization
+    prefix: "Bearer "
+  git:
+    repos-root: /agent_nas/git-repos
+    default-branch: main
+    lock-timeout-seconds: 30
+    redis-lock-enabled: true
+    enterprise-base-url: ${ENTERPRISE_GIT_BASE_URL:}
+    verify-remote: ${ENTERPRISE_GIT_VERIFY_REMOTE:true}
+  nas:
+    root: /agent_nas
+    skills-drafts: /agent_nas/skills/drafts
+    skills-releases: /agent_nas/skills
+    ttl-days: 3
+  k8s:
+    namespace: llmaif
+    kubeconfig: ""
+  llm:
+    # 本机 Ollama 的 OpenAI 兼容接口。Ollama 默认不校验令牌，但请求保留 Bearer 头以兼容接口协议。
+    base-url: ${OLLAMA_BASE_URL:http://127.0.0.1:11434/v1}
+    api-key: ${OLLAMA_API_KEY:ollama}
+    api-key-required: false
+    default-model: ${OLLAMA_MODEL:qwen2.5:3b}
+    timeout-seconds: 180
+  security:
+    credential-encryption-key: ${GIT_CREDENTIAL_ENCRYPTION_KEY:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  level:
+    com.company.llmaif: INFO
+    org.springframework.web: INFO

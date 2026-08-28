@@ -1,0 +1,19 @@
+# OS and editor files
+.DS_Store
+**/.DS_Store
+
+# Frontend build and local dependencies
+frontend-vite/node_modules/
+frontend-vite/dist/
+frontend-vite/.vite/
+
+# Backend build and local runtime data
+backend-java/target/
+backend-java/runtime/
+runtime/
+
+# Local configuration and credentials
+backend-java/.env
+backend-java/.env.local
+frontend-vite/.env
+frontend-vite/.env.local

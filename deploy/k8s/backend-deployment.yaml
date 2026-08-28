@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llmaif-backend
+  namespace: llmaif
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: llmaif-backend }
+  template:
+    metadata:
+      labels: { app: llmaif-backend }
+    spec:
+      containers:
+        - name: backend
+          image: registry.intra.example.com/llmaif/backend:latest
+          ports: [{ containerPort: 8080 }]
+          envFrom:
+            - configMapRef: { name: llmaif-config }
+            - secretRef: { name: llmaif-secrets }
+          volumeMounts:
+            - { name: nas, mountPath: /agent_nas }
+          readinessProbe: { httpGet: { path: /race-api/actuator/health, port: 8080 }, initialDelaySeconds: 15 }
+          livenessProbe: { httpGet: { path: /race-api/actuator/health, port: 8080 }, initialDelaySeconds: 30 }
+          resources:
+            requests: { cpu: "250m", memory: "512Mi" }
+            limits: { cpu: "1", memory: "1Gi" }
+      volumes:
+        - name: nas
+          persistentVolumeClaim: { claimName: llmaif-nas-pvc }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: llmaif-backend, namespace: llmaif }
+spec:
+  selector: { app: llmaif-backend }
+  ports: [{ port: 8080, targetPort: 8080 }]
