@@ -5,15 +5,14 @@ export const DEVELOPMENT_MODES = {
 }
 
 /**
- * 开发前提供给模型的基准测试数据。数据集只描述 Skill 的输入输出契约，
- * 不会被写入 Skill 源码，也不会作为生产数据调用。
- * 每个模板至少包含 3-4 条测试用例（正常、异常、边界）。
+ * 调试区内置的 Mock 数据集。数据只用于本地验证，
+ * 不会被当作生产数据调用。每个数据集覆盖正常、异常和边界场景。
  */
 export const TEST_DATASETS = [
   {
     id: 'product-mock',
     label: '产品查询 Mock 数据',
-    description: '产品信息查询的业务验收模板，含正常、未知编码、参数缺失与风险提示等场景。',
+    description: '产品信息查询的 Mock 调试数据，含正常、未知编码、参数缺失与风险提示等场景。',
     inputSchema: {
       product_code: { type: 'string', required: true, pattern: '^\\d{6}$', description: '6 位产品编码' },
       query: { type: 'string', required: false, description: '查询意图' },
@@ -26,51 +25,6 @@ export const TEST_DATASETS = [
       { id: 'unknown-product', name: '未知产品编码', input: { product_code: '999999', query: '产品信息查询' }, expected: { contains: { error: '产品不存在' } } },
       { id: 'missing-code', name: '缺失产品编码', input: { product_code: '', query: '产品信息查询' }, expected: { contains: { error: 'product_code 不能为空' } } },
       { id: 'high-risk-warning', name: '高风险产品提示', input: { product_code: '110022', query: '产品信息查询' }, expected: { contains: { risk_level: 'R5', risk_warning: '高风险产品' } } },
-    ],
-  },
-  {
-    id: 'product-risk-boundary',
-    label: '产品风险边界数据',
-    description: '覆盖空产品编码、未知编码及高风险等级，要求返回可读错误或风险提示。',
-    inputSchema: {
-      product_code: { type: 'string', required: true, pattern: '^\\d{6}$', description: '6 位产品编码' },
-      risk_level: { type: 'string', required: false, description: '风险等级' },
-    },
-    outputContract: { required: ['error', 'risk_warning'], optional: ['product_code'] },
-    input: { product_code: '', risk_level: 'R5' },
-    expected: { error: 'product_code 不能为空', risk_warning: '高风险产品，请确认使用条件' },
-    testCases: [
-      { id: 'empty-code', name: '空产品编码', input: { product_code: '', risk_level: 'R5' }, expected: { contains: { error: 'product_code 不能为空' } } },
-      { id: 'invalid-format', name: '非法格式编码', input: { product_code: 'abc', risk_level: 'R5' }, expected: { contains: { error: '产品编码必须是6位数字' } } },
-      { id: 'high-risk-check', name: '高风险等级校验', input: { product_code: '110022', risk_level: 'R5' }, expected: { contains: { risk_warning: '高风险产品' } } },
-    ],
-  },
-  {
-    id: 'product-comparison',
-    label: '产品批量对比数据',
-    description: '覆盖多个产品编码、指标选择与排序，适用于产品对比或筛选类 Skill。',
-    inputSchema: {
-      product_codes: { type: 'array', required: true, description: '产品编码列表' },
-      metrics: { type: 'array', required: false, description: '查询指标列表' },
-      sort_by: { type: 'string', required: false, description: '排序字段' },
-    },
-    outputContract: { required: ['comparison', 'sorted_by'], optional: ['error'] },
-    input: {
-      product_codes: ['000001', '110022'],
-      metrics: ['latest_status', 'change_rate', 'risk_level'],
-      sort_by: 'change_rate',
-    },
-    expected: {
-      comparison: [
-        { product_code: '000001', latest_status: '正常', change_rate: '2.36%', risk_level: 'R2' },
-        { product_code: '110022', latest_status: '关注', change_rate: '1.18%', risk_level: 'R3' },
-      ],
-      sorted_by: 'change_rate',
-    },
-    testCases: [
-      { id: 'normal-comparison', name: '正常批量对比', input: { product_codes: ['000001', '110022'], metrics: ['latest_status', 'change_rate', 'risk_level'], sort_by: 'change_rate' }, expected: { contains: { sorted_by: 'change_rate' } } },
-      { id: 'empty-list', name: '空产品列表', input: { product_codes: [], metrics: ['latest_status'], sort_by: 'change_rate' }, expected: { contains: { error: 'product_codes 不能为空' } } },
-      { id: 'single-product', name: '单个产品对比', input: { product_codes: ['000001'], metrics: ['latest_status'], sort_by: 'latest_status' }, expected: { contains: { sorted_by: 'latest_status' } } },
     ],
   },
   {
@@ -106,47 +60,6 @@ export const TEST_DATASETS = [
       { id: 'flatten-object', name: '对象扁平化', input: { source_data: { user: { name: '张三', age: 30 } }, target_format: 'flat' }, expected: { contains: { target_format: 'flat' } } },
       { id: 'empty-data', name: '空数据校验', input: { source_data: {}, target_format: 'flat' }, expected: { contains: { error: 'source_data 不能为空' } } },
       { id: 'invalid-format', name: '非法格式', input: { source_data: { a: 1 }, target_format: 'xml' }, expected: { contains: { error: '不支持的格式' } } },
-    ],
-  },
-  {
-    id: 'news-search',
-    label: '新闻资讯检索数据',
-    description: '覆盖关键词、时间范围与数量限制，适用于资讯检索、摘要与分类类 Skill。',
-    inputSchema: {
-      keyword: { type: 'string', required: true, description: '搜索关键词' },
-      date_range: { type: 'string', required: false, description: '时间范围' },
-      limit: { type: 'number', required: false, description: '返回数量上限' },
-    },
-    outputContract: { required: ['items', 'total'], optional: ['error'] },
-    input: { keyword: '新能源', date_range: '7d', limit: 3 },
-    expected: {
-      items: [
-        { title: '示例资讯标题', source: 'Mock News', published_at: '2026-08-12', summary: '资讯摘要' },
-      ],
-      total: 1,
-    },
-    testCases: [
-      { id: 'normal-search', name: '正常搜索', input: { keyword: '新能源', date_range: '7d', limit: 3 }, expected: { contains: { total: 1 } } },
-      { id: 'empty-keyword', name: '空关键词', input: { keyword: '', date_range: '7d', limit: 3 }, expected: { contains: { error: 'keyword 不能为空' } } },
-      { id: 'no-results', name: '无结果搜索', input: { keyword: '不存在的关键词', date_range: '1d', limit: 5 }, expected: { contains: { total: 0 } } },
-    ],
-  },
-  {
-    id: 'privacy-mask',
-    label: '敏感信息脱敏数据',
-    description: '覆盖手机号与用户标识处理，要求输出符合脱敏规范，不能泄露原始敏感字段。',
-    inputSchema: {
-      user_id: { type: 'string', required: true, description: '用户标识' },
-      phone: { type: 'string', required: true, description: '手机号' },
-      action: { type: 'string', required: false, description: '操作类型' },
-    },
-    outputContract: { required: ['user_id', 'masked_phone'], optional: ['privacy_checked', 'error'] },
-    input: { user_id: 'U10086', phone: '13812345678', action: 'profile_query' },
-    expected: { user_id: 'U10086', masked_phone: '138****5678', privacy_checked: true },
-    testCases: [
-      { id: 'normal-mask', name: '正常脱敏', input: { user_id: 'U10086', phone: '13812345678', action: 'profile_query' }, expected: { contains: { masked_phone: '138****5678' } } },
-      { id: 'empty-phone', name: '空手机号', input: { user_id: 'U10086', phone: '', action: 'profile_query' }, expected: { contains: { error: 'phone 不能为空' } } },
-      { id: 'invalid-phone', name: '非法手机号', input: { user_id: 'U10086', phone: '123', action: 'profile_query' }, expected: { contains: { error: '手机号格式不正确' } } },
     ],
   },
 ]
@@ -185,8 +98,9 @@ export function validateBusinessTestData(data) {
 }
 
 export function buildSkillScaffold(name = '未命名 Skill', description = '', version = '0.0.0') {
+  const safeName = (name || '未命名 Skill').replace(/\s+/g, '-').toLowerCase()
   return {
-    'SKILL.md': `# ${name}\n\n## 版本\n- 当前版本：${version}\n- 发布状态：草稿\n\n## 简介\n${description || '待补充 Skill 描述'}\n\n## 输入\n- 请在此描述输入字段与校验规则。\n\n## 输出\n- 请在此描述返回字段与错误结构。\n\n## 使用说明\n请在 scripts/main.py 中实现 Skill 逻辑。\n`,
+    'SKILL.md': `---\nname: ${safeName}\nname_zh: ${name || '未命名 Skill'}\ndescription: ${description || '待补充 Skill 描述'}\nversion: ${version}\ntags: []\nrunEnv: python\ndigestValue: \n---\n\n# ${name || '未命名 Skill'}\n\n## 简介\n${description || '待补充 Skill 描述'}\n\n## 输入\n- 请在此描述输入字段与校验规则。\n\n## 输出\n- 请在此描述返回字段与错误结构。\n\n## 使用说明\n请在 scripts/main.py 中实现 Skill 逻辑。\n`,
     'requirements.txt': '# 当前 Skill 仅使用 Python 标准库；如引入第三方库，请在此逐行声明具体版本。\n',
     'references/implementation-notes.md': `# ${name} 参考说明\n\n- 维护输入字段、输出契约、Mock 数据来源与业务规则。\n- 业务测试数据保存在 references/test-data.json。\n- 不在此目录保存 YAML 文件。\n`,
     'references/data-source.json': '{\n  "type": "mock",\n  "databaseApiUrl": "",\n  "credentialEnv": "SKILL_DATABASE_API_TOKEN",\n  "description": "生产环境可配置数据库 API 地址；密钥只通过后端环境变量注入，不写入 Skill 文件。"\n}\n',
@@ -194,6 +108,131 @@ export function buildSkillScaffold(name = '未命名 Skill', description = '', v
     'scripts/validators.py': 'def validate_input(input_data: dict) -> str:\n    """校验输入参数，合法时返回空字符串，否则返回错误信息。"""\n    if not isinstance(input_data, dict):\n        return "input_data 必须是 JSON 对象"\n    return ""\n',
     'scripts/mock_data.py': '# Mock 数据表，开发阶段使用，后续可替换为数据库 API\n_MOCK_DATA = {}\n\n\ndef build_mock_result(input_data: dict) -> dict:\n    """根据输入返回 Mock 数据。"""\n    return dict(input_data)\n',
   }
+}
+
+/**
+ * 运行目标平台可选项。用于 Skill 声明它支持在哪些 CPU 架构/OS 上运行，
+ * 类似 Docker 镜像的 platform 声明，便于分发与部署匹配。
+ */
+export const PLATFORM_OPTIONS = [
+  { value: 'x86_64', label: 'x86_64', desc: 'Intel/AMD 64 位' },
+  { value: 'arm64', label: 'arm64', desc: 'ARM 64 位（如 Apple Silicon / 鲲鹏）' },
+  { value: 'linux-x86_64', label: 'linux-x86_64', desc: 'Linux x86_64' },
+  { value: 'linux-arm64', label: 'linux-arm64', desc: 'Linux ARM64' },
+  { value: 'windows', label: 'windows', desc: 'Windows' },
+  { value: 'macos', label: 'macos', desc: 'macOS' },
+]
+
+const REQ_LINE_RE = /^\s*([A-Za-z0-9_.\-]+)\s*(==|>=|<=|~=|!=|>|<)?\s*([A-Za-z0-9_.\-+*,]*)\s*$/
+
+/**
+ * 解析 requirements.txt 内容，返回依赖列表。
+ * 支持 package==1.0 / package>=1.0 / package / # 注释 / -r other.txt。
+ * 与后端 SkillCodeLogic.parseRequirements 保持一致。
+ */
+export function parseRequirements(content) {
+  const deps = []
+  if (!content) return deps
+  for (const raw of String(content).split(/\r?\n/)) {
+    const line = (raw.split('#')[0] || '').trim()
+    if (!line || line.startsWith('-')) continue
+    const m = REQ_LINE_RE.exec(line)
+    if (!m) continue
+    const op = m[2]
+    const ver = m[3]
+    deps.push({
+      name: m[1],
+      versionConstraint: op ? `${op}${ver || ''}` : '',
+      source: 'requirements.txt',
+    })
+  }
+  return deps
+}
+
+/**
+ * 解析 SKILL.md 前言区 dependency 字段，格式：
+ * dependency:
+ *   python:
+ *     - jinja2>=3.1.0
+ */
+export function parseSkillFrontmatterDependency(skillMd) {
+  const deps = []
+  if (!skillMd) return deps
+  const fm = skillMd.match(/^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/)
+  if (!fm) return deps
+  const lines = fm[1].split(/\r?\n/)
+  let inDep = false
+  for (const line of lines) {
+    if (/^\s*dependency\s*:/.test(line)) { inDep = true; continue }
+    if (inDep) {
+      if (!/^\s/.test(line) && line.trim() !== '') { inDep = false; continue }
+      const item = line.replace(/^\s*-\s*/, '').trim()
+      if (!item) continue
+      const m = REQ_LINE_RE.exec(item)
+      if (!m) continue
+      const op = m[2]
+      const ver = m[3]
+      deps.push({
+        name: m[1],
+        versionConstraint: op ? `${op}${ver || ''}` : '',
+        source: 'SKILL.md',
+      })
+    }
+  }
+  return deps
+}
+
+/**
+ * 解析 skill 内 scripts/*.py 之间的 import 调用关系，用于内部模块架构图。
+ * 识别 from scripts.xxx import ... 与 import scripts.xxx。
+ * 返回 [{ from: 'scripts/main.py', to: 'scripts/validators.py' }]
+ */
+export function parsePythonImports(files) {
+  const edges = []
+  if (!files) return edges
+  for (const [path, content] of Object.entries(files)) {
+    if (!path.endsWith('.py') || !content) continue
+    const fromModule = path.replace(/\.py$/, '').replace(/\//g, '.')
+    const text = String(content)
+    // from scripts.xxx import y / from .xxx import y / from scripts import y
+    const fromRe = /^\s*from\s+((?:scripts|\.)[\w.]*)\s+import/gm
+    let m
+    while ((m = fromRe.exec(text)) !== null) {
+      const target = resolveModulePath(m[1], path)
+      if (target && target !== path) edges.push({ from: path, to: target })
+    }
+    // import scripts.xxx / import scripts
+    const impRe = /^\s*import\s+(scripts[\w.]*)/gm
+    while ((m = impRe.exec(text)) !== null) {
+      const target = resolveModulePath(m[1], path)
+      if (target && target !== path) edges.push({ from: path, to: target })
+    }
+    // 忽略 fromModule 自身变量未使用告警
+    void fromModule
+  }
+  // 去重
+  const seen = new Set()
+  return edges.filter(e => {
+    const k = `${e.from}->${e.to}`
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })
+}
+
+function resolveModulePath(moduleName, fromPath) {
+  // scripts.validators -> scripts/validators.py
+  // .validators -> 同目录 validators.py
+  let parts
+  if (moduleName.startsWith('.')) {
+    const dir = fromPath.includes('/') ? fromPath.replace(/\/[^/]+$/, '') : ''
+    parts = moduleName.replace(/^\./, '').split('.')
+    const leaf = parts.filter(Boolean).join('/')
+    return leaf ? `${dir ? dir + '/' : ''}${leaf}.py` : null
+  }
+  parts = moduleName.split('.').filter(Boolean)
+  if (parts[0] !== 'scripts') return null
+  return 'scripts/' + parts.slice(1).join('/') + '.py'
 }
 
 export function skillCategory(skill) {

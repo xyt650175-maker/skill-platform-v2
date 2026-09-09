@@ -1,6 +1,7 @@
 package com.company.llmaif.chat.service.impl;
 
 import com.company.llmaif.chat.service.ChatService;
+import com.company.llmaif.chat.service.DeepAgentRuntimeService;
 import com.company.llmaif.chat.service.vo.ChatRequestDTO;
 import com.company.llmaif.common.AgentException;
 import com.company.llmaif.config.LlmaifProperties;
@@ -32,26 +33,36 @@ public class ChatServiceImpl implements ChatService {
 
     private final LlmaifProperties properties;
     private final ObjectMapper objectMapper;
+    private final DeepAgentRuntimeService deepAgentRuntimeService;
 
     @Override
     public SseEmitter stream(ChatRequestDTO dto) {
+        return startStream(dto, null);
+    }
+
+    @Override
+    public SseEmitter streamSkillCreator(ChatRequestDTO dto) {
+        return deepAgentRuntimeService.streamSkillCreator(dto);
+    }
+
+    private SseEmitter startStream(ChatRequestDTO dto, String enforcedSystemPrompt) {
         LlmaifProperties.Llm llm = properties.getLlm();
         if (llm.isApiKeyRequired() && (llm.getApiKey() == null || llm.getApiKey().trim().isEmpty())) {
             throw new AgentException("未配置模型访问令牌，无法调用模型");
         }
 
         SseEmitter emitter = new SseEmitter(TimeUnit.SECONDS.toMillis(llm.getTimeoutSeconds()));
-        CompletableFuture.runAsync(() -> proxyStream(dto, llm, emitter));
+        CompletableFuture.runAsync(() -> proxyStream(dto, llm, emitter, enforcedSystemPrompt));
         return emitter;
     }
 
-    private void proxyStream(ChatRequestDTO dto, LlmaifProperties.Llm llm, SseEmitter emitter) {
+    private void proxyStream(ChatRequestDTO dto, LlmaifProperties.Llm llm, SseEmitter emitter, String enforcedSystemPrompt) {
         OkHttpClient client = new OkHttpClient.Builder()
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(llm.getTimeoutSeconds(), TimeUnit.SECONDS)
                 .build();
         try {
-            String body = buildRequest(dto, llm.getDefaultModel());
+            String body = buildRequest(dto, llm.getDefaultModel(), enforcedSystemPrompt);
             Request.Builder requestBuilder = new Request.Builder()
                     .url(llm.getBaseUrl().replaceAll("/+$", "") + "/chat/completions")
                     .header("Content-Type", "application/json")
@@ -79,16 +90,23 @@ public class ChatServiceImpl implements ChatService {
         }
     }
 
-    private String buildRequest(ChatRequestDTO dto, String model) throws IOException {
+    private String buildRequest(ChatRequestDTO dto, String model, String enforcedSystemPrompt) throws IOException {
         ObjectNode root = objectMapper.createObjectNode();
         root.put("model", model);
         root.put("temperature", 0.7);
-        root.put("max_tokens", 4096);
+        root.put("max_tokens", enforcedSystemPrompt == null ? 4096 : 8192);
         root.put("stream", true);
         root.putObject("stream_options").put("include_usage", true);
         ArrayNode messages = root.putArray("messages");
+        if (enforcedSystemPrompt != null && !enforcedSystemPrompt.trim().isEmpty()) {
+            messages.addObject().put("role", "system").put("content", enforcedSystemPrompt);
+        }
         for (ChatRequestDTO.MessageDTO message : dto.getMessages()) {
-            messages.addObject().put("role", message.getRole()).put("content", message.getContent());
+            String role = enforcedSystemPrompt != null && "system".equals(message.getRole()) ? "user" : message.getRole();
+            String content = enforcedSystemPrompt != null && "system".equals(message.getRole())
+                    ? "\u4ee5\u4e0b\u662f\u5f53\u524d Skill \u5de5\u4f5c\u533a\u4e0a\u4e0b\u6587\uff1a\n" + message.getContent()
+                    : message.getContent();
+            messages.addObject().put("role", role).put("content", content);
         }
         return objectMapper.writeValueAsString(root);
     }

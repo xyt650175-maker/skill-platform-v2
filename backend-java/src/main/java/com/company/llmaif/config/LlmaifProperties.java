@@ -17,6 +17,7 @@ public class LlmaifProperties {
     private Nas nas = new Nas();
     private K8s k8s = new K8s();
     private Llm llm = new Llm();
+    private DeepAgent deepAgent = new DeepAgent();
     private Security security = new Security();
 
     @Data
@@ -61,6 +62,15 @@ public class LlmaifProperties {
         private boolean apiKeyRequired = false;
         private String defaultModel = "qwen2.5:3b";
         private int timeoutSeconds = 180;
+    }
+
+    @Data
+    public static class DeepAgent {
+        /** Skill 创建必须经过真实 Deep Agents SDK 运行时。 */
+        private boolean enabled = true;
+        private String pythonExecutable = "python3";
+        private String runtimeScript = "deepagent-runtime/runtime.py";
+        private int timeoutSeconds = 300;
     }
 
     @Data

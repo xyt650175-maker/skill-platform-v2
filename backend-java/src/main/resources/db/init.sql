@@ -34,6 +34,8 @@ CREATE TABLE `skill` (
   `status` VARCHAR(32) DEFAULT 'draft' COMMENT 'draft/testing/released',
   `visibility` VARCHAR(16) NOT NULL DEFAULT 'private' COMMENT '可见范围：public/private/team',
   `entry_file` VARCHAR(256) DEFAULT 'scripts/main.py',
+  `target_platforms` VARCHAR(256) DEFAULT NULL COMMENT '运行目标平台，逗号分隔，如 x86_64,arm64,linux-x86_64',
+  `dependency_summary` TEXT COMMENT '依赖摘要 JSON（包名/版本/来源），由后端解析 requirements.txt 缓存',
   `creator_id` BIGINT DEFAULT NULL,
   `is_deleted` TINYINT NOT NULL DEFAULT 0,
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,

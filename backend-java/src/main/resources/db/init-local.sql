@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS skill (
   status VARCHAR(32) DEFAULT 'draft',
   visibility VARCHAR(16) NOT NULL DEFAULT 'private',
   entry_file VARCHAR(256) DEFAULT 'scripts/main.py',
+  target_platforms VARCHAR(256),
+  dependency_summary CLOB,
   creator_id BIGINT,
   is_deleted TINYINT NOT NULL DEFAULT 0,
   create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -208,3 +210,19 @@ MERGE INTO team (id, name, description, owner_id) KEY(id) VALUES
   (1, '默认研发团队', '本地联调默认团队', 1);
 MERGE INTO team_member (team_id, user_id, member_role) KEY(team_id, user_id) VALUES
   (1, 1, 'admin'), (1, 2, 'member'), (1, 3, 'member');
+
+-- 本地联调 Mock：用于验证“智能体 -> 版本”两级下拉联动。
+MERGE INTO agent (id, name, description, current_version, status, model_name, system_prompt, creator_id, is_deleted)
+KEY(id) VALUES
+  (1001, '客户服务助手', '处理客户咨询、知识检索与工单分流', '1.2.0', 'active', 'qwen3.7-max', '你是客户服务助手。', 1, 0),
+  (1002, '运营分析助手', '处理指标查询、趋势分析与摘要生成', '2.1.0', 'active', 'qwen3.7-plus', '你是运营分析助手。', 1, 0),
+  (1003, '文档审核助手', '处理文档要素检查、风险提示与修改建议', '0.9.0', 'testing', 'qwen3.6-flash', '你是文档审核助手。', 1, 0);
+
+MERGE INTO agent_version (id, agent_id, version, change_summary, creator_id) KEY(id) VALUES
+  (1101, 1001, '1.0.0', '基础问答与知识检索', 1),
+  (1102, 1001, '1.1.0', '增加工单分流', 1),
+  (1103, 1001, '1.2.0', '优化多轮上下文', 1),
+  (1201, 1002, '2.0.0', '指标查询与摘要', 1),
+  (1202, 1002, '2.1.0', '增加趋势对比', 1),
+  (1301, 1003, '0.8.0', '文档要素检查', 1),
+  (1302, 1003, '0.9.0', '增加风险分级提示', 1);

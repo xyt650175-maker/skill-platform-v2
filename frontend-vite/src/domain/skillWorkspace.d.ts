@@ -1,5 +1,6 @@
 export const DEVELOPMENT_MODES: Record<'online' | 'local' | 'git', { label: string; hint: string }>;
 export const TEST_DATASETS: any[];
+export const PLATFORM_OPTIONS: { value: string; label: string; desc: string }[];
 export function getTestDataset(id: string): any;
 export function getDatasetTestCases(dataset: any): any[];
 export function buildBusinessTestData(dataset: any): any;
@@ -10,3 +11,6 @@ export function parseDebugInput(input: string): any;
 export function canSubmitForReview(status: string, debugPassed: boolean): boolean;
 export function skillActions(skill: any): any[];
 export function skillCategory(skill: any): string;
+export function parseRequirements(content: string): { name: string; versionConstraint: string; source: string }[];
+export function parseSkillFrontmatterDependency(skillMd: string): { name: string; versionConstraint: string; source: string }[];
+export function parsePythonImports(files: Record<string, string>): { from: string; to: string }[];

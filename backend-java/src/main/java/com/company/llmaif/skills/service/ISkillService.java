@@ -40,6 +40,11 @@ public interface ISkillService {
      */
     void updateVersion(Long id, String newVersion);
 
+    /**
+     * 更换 Skill 关联的智能体及版本（二次开发时换绑）
+     */
+    void updateAgentBinding(Long id, Long agentId, String agentVersion);
+
     SkillReviewVO submitReview(Long id, Long applicantId, java.util.Map<String, Object> debugResult);
 
     List<SkillReviewVO> listReviews(String status);

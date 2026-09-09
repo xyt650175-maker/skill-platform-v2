@@ -3,7 +3,7 @@
     <div class="login-card">
       <div class="logo">
         <span class="logo-icon">🦐</span>
-        <span class="logo-text">云虾 AgentOps</span>
+        <span class="logo-text">智能应用协作平台</span>
       </div>
       <p class="subtitle">企业级智能体全链路平台 · LangChain + DeepAgent</p>
       <el-form :model="form" @submit.prevent="handleLogin" label-position="top">

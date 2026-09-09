@@ -1,2 +1,5 @@
 .env
 target/
+.deepagent-venv/
+__pycache__/
+*.pyc

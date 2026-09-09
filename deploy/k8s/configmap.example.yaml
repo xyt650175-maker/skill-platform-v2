@@ -5,3 +5,6 @@ data:
   SPRING_PROFILES_ACTIVE: "prod"
   ENTERPRISE_GIT_BASE_URL: "https://git.intra.example.com"
   TOKEN_PLAN_BASE_URL: "http://maas-gateway.intra.example.com/compatible-mode/v1"
+  DEEPAGENT_ENABLED: "true"
+  DEEPAGENT_PYTHON: "python3"
+  DEEPAGENT_RUNTIME_SCRIPT: "/app/deepagent-runtime/runtime.py"

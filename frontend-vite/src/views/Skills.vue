@@ -71,22 +71,6 @@
               </button>
             </div>
           </div>
-          <section class="generation-template" aria-label="测试数据模板">
-            <b>测试数据模板：</b>
-            <div class="template-select">
-              <button class="template-select-trigger" @click="templateMenuOpen = !templateMenuOpen">{{ selectedTemplate.label }} <span>⌄</span></button>
-              <div v-if="templateMenuOpen" class="template-select-menu">
-                <div v-for="dataset in availableTemplates" :key="dataset.id" :class="['template-option', { selected: dataset.id === templateDatasetId }]">
-                  <button class="template-option-name" @click="selectTemplate(dataset.id)">{{ dataset.id === templateDatasetId ? '✓ ' : '' }}{{ dataset.label }}</button>
-                  <span class="template-option-actions">
-                    <button @click="downloadTemplate(dataset)">下载</button>
-                    <button @click="previewTemplate(dataset.id)">查看</button>
-                  </span>
-                </div>
-                <button class="template-manage-option" @click="openNewTemplateManager">＋ 上传 / 管理模板</button>
-              </div>
-            </div>
-          </section>
           <div class="chat-input-area">
             <textarea
               ref="chatInputRef"
@@ -113,6 +97,7 @@
         <section class="col">
           <div class="tabs" aria-label="工作区视图">
             <button :class="{ active: midTab === 'files' }" @click="midTab = 'files'">Skill 文件</button>
+            <button :class="{ active: midTab === 'deps' }" @click="midTab = 'deps'; ensureAgentOptions()">依赖&架构</button>
             <button :class="{ active: midTab === 'debug' }" @click="midTab = 'debug'">调试</button>
             <button :class="{ active: midTab === 'versions' }" @click="midTab = 'versions'; loadVersions()">版本历史</button>
             <button :class="{ active: midTab === 'logs' }" @click="midTab = 'logs'; loadOperationLogs(1)">日志</button>
@@ -182,8 +167,50 @@
             </div>
             </div>
 
-    <div class="hint" style="margin-top:8px">标准 Skill 目录：SKILL.md（含 YAML 前言区）/ scripts/ / references/ / requirements.txt · AI 生成时本区域实时更新</div>
+    <div class="hint" style="margin-top:8px">SKILL.md（含 YAML 前言区）为必需文件；scripts/、references/、assets/ 与 requirements.txt 按需生成 · AI 生成时本区域实时更新</div>
 
+          </div>
+
+          <!-- 依赖与架构：解析 requirements.txt / SKILL.md 前言区 dependency，展示运行平台与内部模块调用关系 -->
+          <div v-else-if="midTab === 'deps'" class="debug-panel deps-panel">
+            <div class="debug-panel-head"><b>依赖与架构</b><span>requirements.txt · SKILL.md dependency · 运行平台 · 模块调用</span></div>
+
+            <div v-if="!currentSkill" class="pad hint">请先选择一个 Skill。</div>
+            <template v-else>
+              <!-- 依赖列表 -->
+              <h4 class="deps-section-title">依赖列表</h4>
+              <div class="deps-table-wrap">
+                <table class="deps-table">
+                  <thead><tr><th>包名</th><th>版本约束</th><th>来源</th></tr></thead>
+                  <tbody>
+                    <tr v-for="d in dependencyList" :key="`${d.source}:${d.name}`">
+                      <td><code>{{ d.name }}</code></td>
+                      <td>{{ d.versionConstraint || '—' }}</td>
+                      <td><span class="dep-source">{{ d.source }}</span></td>
+                    </tr>
+                    <tr v-if="!dependencyList.length"><td colspan="3" class="hint">暂无依赖。可在 requirements.txt 或 SKILL.md 前言区 dependency 字段声明。</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- 二次开发：更换关联智能体及版本 -->
+              <h4 class="deps-section-title">关联智能体 <small>二次开发时可在此更换</small></h4>
+              <div class="agent-binding-row">
+                <select class="input" v-model="editingAgentId" @change="onEditAgentChange">
+                  <option v-for="agent in agentOptions" :key="agent.id" :value="agent.id">{{ agent.name }}</option>
+                </select>
+                <select class="input" v-model="editingAgentVersion" :disabled="!editingAgentId" style="max-width:200px">
+                  <option v-for="v in editingAgentVersions" :key="v.version" :value="v.version">{{ v.version }}<span v-if="v.changeSummary"> - {{ v.changeSummary }}</span></option>
+                </select>
+                <button class="btn primary" @click="saveAgentBinding" :disabled="savingBinding">{{ savingBinding ? '保存中…' : '更换' }}</button>
+              </div>
+              <p class="hint" v-if="!agentOptions.length">暂无智能体，请先在智能体中心创建。</p>
+
+              <!-- Skill 内部模块调用关系图 -->
+              <h4 class="deps-section-title">Skill 内部模块调用关系</h4>
+              <div v-if="!moduleEdges.length" class="pad hint">未发现 scripts/*.py 之间的 import 调用关系。</div>
+              <div v-else class="module-graph" v-html="moduleGraphSvg"></div>
+            </template>
           </div>
 
           <!-- 调试：执行当前 Skill 的完整工作区文件 -->
@@ -191,20 +218,18 @@
             <div class="debug-panel-head"><b>调试结果</b><span>运行输出　Token　Prompt 调试</span></div>
             <div class="debug-mode-note">受限本地运行（非容器沙箱）· 临时目录 · Python 隔离模式 · 3 秒超时</div>
             <div class="hint">执行 <code>scripts/main.py</code> 中的 <code>handle(input_data)</code>，输入必须为 JSON 对象。</div>
-            <label class="label" style="margin-top:10px">调试数据来源</label>
-            <select class="input" v-model="debugDataSource">
-              <option value="template-sample">模板示例输入（快速验证）</option>
-              <option value="template-all">模板完整用例（全量测试）</option>
-              <option value="business" :disabled="!businessDataset">已上传业务测试数据{{ businessDataset ? `（${debugTestCases.length} 条）` : '（请先保存）' }}</option>
-            </select>
-            <div v-if="debugDataSource === 'business'" class="debug-dataset-sync">
-              <label>选择测试用例</label>
-              <select class="input" v-model="selectedDebugCaseId"><option v-for="item in debugTestCases" :key="item.id" :value="item.id">{{ item.name }}</option></select>
-            </div>
+            <section class="debug-data-card">
+              <div class="debug-data-title"><div><b>选择测试数据</b><span>{{ debugDataSourceLabel }} · {{ debugTestCases.length }} 条用例</span></div><button class="btn sm" @click="openTestDataEditor">编辑测试数据</button></div>
+              <div class="debug-data-grid">
+                <label><span>数据来源</span><select class="input" v-model="debugDataSource"><option value="mock">内置 Mock 数据</option><option value="business" :disabled="!businessDataset">当前 Skill 数据{{ businessDataset ? '' : '（未保存）' }}</option></select></label>
+                <label v-if="debugDataSource === 'mock'"><span>Mock 数据集</span><select class="input" v-model="templateDatasetId"><option v-for="dataset in availableTemplates" :key="dataset.id" :value="dataset.id">{{ dataset.label }} · {{ getDatasetTestCases(dataset).length }} 条</option></select></label>
+                <label><span>测试用例</span><select class="input" v-model="selectedDebugCaseId"><option v-for="item in debugTestCases" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
+              </div>
+            </section>
             <label class="label" style="margin-top:10px">测试输入 (JSON)</label>
-            <div class="debug-dataset-sync">{{ debugDataSource === 'template-all' ? '当前展示完整模板数据；点击"运行全部用例"将按其中 testCases 逐条执行。' : `${debugDataSourceLabel}；可直接编辑当前输入。` }}</div>
+            <div class="debug-dataset-sync">已加载“{{ selectedDebugCase?.name || '默认用例' }}”，可直接修改本次输入，不会覆盖原数据。</div>
             <textarea class="area" v-model="debugInput" placeholder='{"product_code": "000001"}' style="min-height:80px"></textarea>
-            <button class="btn primary" style="margin-top:10px" @click="runDebug" :disabled="!currentSkill || debugRunning">{{ debugRunning ? '运行中…' : '运行调试' }}</button>
+            <div class="debug-run-actions"><button class="btn primary" @click="runDebug" :disabled="!currentSkill || debugRunning">{{ debugRunning ? '运行中…' : '运行当前用例' }}</button><button class="btn" @click="runAllTestCases" :disabled="!currentSkill || debugRunning || !debugTestCases.length">运行全部用例</button></div>
             <div class="box" style="margin-top:10px">
               <b>运行结果</b>
               <pre class="debug-output">{{ debugResult }}</pre>
@@ -348,17 +373,20 @@
       </div>
     </div>
 
+
+
     <div v-if="dialogModeChooser" class="modal-mask" @click.self="dialogModeChooser=false">
       <div class="modal-box creation-dialog mode-create-dialog">
         <div class="modal-head"><b>新建skill</b><button class="modal-close" @click="dialogModeChooser=false" aria-label="关闭">×</button></div>
         <div class="modal-body">
           <div class="mode-agent-row">
             <label class="label">选择智能体</label>
-            <select class="input agent-picker" v-model="newSkill.agentName" @change="onAgentNameChange">
-              <option v-for="agent in agentOptions" :key="agent.id" :value="agent.name">{{ agent.name }}</option>
+            <select class="input agent-picker" v-model="newSkill.agentId" @change="onAgentNameChange">
+              <option v-for="agent in agentOptions" :key="agent.id" :value="agent.id">{{ agent.name }}</option>
             </select>
+            <span class="hint" v-if="!agentOptions.length">暂无智能体，请先在智能体中心创建</span>
           </div>
-          <div class="mode-agent-row" v-if="newSkill.agentName">
+          <div class="mode-agent-row" v-if="newSkill.agentId">
             <label class="label">选择版本</label>
             <select class="input agent-version-picker" v-model="newSkill.agentVersion">
               <option v-for="v in agentVersions" :key="v.version" :value="v.version">{{ v.version }}<span v-if="v.changeSummary"> - {{ v.changeSummary }}</span></option>
@@ -383,34 +411,6 @@
         <p class="hint">业务人员为已生成的 Skill 维护完整测试案例和预期结果。保存后写入当前 Skill 的 <code>references/test-data.json</code>，用于单条调试和全量测试。</p>
         <textarea v-model="testDataEditorText" class="area test-data-editor" spellcheck="false"></textarea>
         <div class="modal-actions"><button class="btn" @click="testDataEditorVisible = false">取消</button><button class="btn primary" @click="saveBusinessTestData" :disabled="testDataSaving">{{ testDataSaving ? '保存中…' : '保存并使用' }}</button></div>
-      </div>
-    </div>
-
-    <div v-if="templatePreviewVisible" class="modal-mask" @click.self="templatePreviewVisible = false">
-      <div class="modal-box template-preview-modal">
-        <div class="modal-head"><b>测试数据模板 · {{ selectedTemplate.label }}</b><button class="icon-btn" @click="templatePreviewVisible = false">×</button></div>
-        <p class="hint">该模板会作为本轮 Skill 生成的业务约束。以下是模板的实际字段、样例和用例内容。</p>
-        <div class="template-preview-summary">
-          <div><b>说明</b><span>{{ selectedTemplate.description }}</span></div>
-          <div><b>示例输入</b><code>{{ JSON.stringify(selectedTemplate.input, null, 2) }}</code></div>
-          <div><b>示例输出</b><code>{{ JSON.stringify(selectedTemplate.expected, null, 2) }}</code></div>
-        </div>
-        <b class="template-preview-label">完整模板数据</b>
-        <pre class="template-preview-code">{{ JSON.stringify(buildBusinessTestData(selectedTemplate), null, 2) }}</pre>
-        <div class="modal-actions"><button class="btn primary" @click="templatePreviewVisible = false">确认使用此模板</button></div>
-      </div>
-    </div>
-
-    <div v-if="templateManagerVisible" class="modal-mask" @click.self="templateManagerVisible = false">
-      <div class="modal-box template-preview-modal">
-        <div class="modal-head"><b>管理测试数据模板</b><button class="icon-btn" @click="templateManagerVisible = false">×</button></div>
-        <p class="hint">可编辑当前模板，或上传业务人员提供的 JSON。保存后，该模板将用于后续 AI 生成的输入、输出和业务规则约束。</p>
-        <label class="label">模板名称 <span class="required-mark">*</span></label>
-        <input v-model.trim="templateEditorName" class="input template-name-input" placeholder="例如：产品风险分层数据" />
-        <p class="hint template-name-hint">该名称会显示在"测试数据模板"下拉列表中。</p>
-        <label class="template-upload"><span>上传 JSON 模板</span><input type="file" accept="application/json,.json" @change="importTemplate" /></label>
-        <textarea v-model="templateEditorText" class="area test-data-editor" spellcheck="false"></textarea>
-        <div class="modal-actions"><button class="btn" @click="templateManagerVisible = false">取消</button><button class="btn primary" @click="saveTemplate">保存模板</button></div>
       </div>
     </div>
 
@@ -457,10 +457,10 @@
           <label class="label">描述</label>
           <textarea class="area" v-model="newSkill.description"></textarea>
           <label class="label">关联智能体</label>
-          <select class="input" v-model="newSkill.agentName" @change="onAgentNameChange">
-            <option v-for="agent in agentOptions" :key="agent.id" :value="agent.name">{{ agent.name }}</option>
+          <select class="input" v-model="newSkill.agentId" @change="onAgentNameChange">
+            <option v-for="agent in agentOptions" :key="agent.id" :value="agent.id">{{ agent.name }}</option>
           </select>
-          <div v-if="newSkill.agentName" style="margin-top:8px">
+          <div v-if="newSkill.agentId" style="margin-top:8px">
             <label class="label">选择版本</label>
             <select class="input" v-model="newSkill.agentVersion" style="max-width:300px">
               <option v-for="v in agentVersions" :key="v.version" :value="v.version">{{ v.version }}<span v-if="v.changeSummary"> - {{ v.changeSummary }}</span></option>
@@ -517,7 +517,7 @@ import { python } from '@codemirror/lang-python'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import JSZip from 'jszip'
-import { DEVELOPMENT_MODES, TEST_DATASETS, buildBusinessTestData, canSubmitForReview, getDatasetTestCases, getTestDataset, parseDebugInput, validateBusinessTestData } from '@/domain/skillWorkspace'
+import { DEVELOPMENT_MODES, TEST_DATASETS, buildBusinessTestData, canSubmitForReview, getDatasetTestCases, getTestDataset, parseDebugInput, validateBusinessTestData, parseRequirements, parseSkillFrontmatterDependency, parsePythonImports } from '@/domain/skillWorkspace'
 
 /* ==================== Skill 列表 ==================== */
 const skills = ref<Skill[]>([])
@@ -525,11 +525,7 @@ const router = useRouter()
 const route = useRoute()
 const activeDevelopmentMode = ref<'online' | 'local' | 'git'>('online')
 const developmentMode = computed(() => DEVELOPMENT_MODES[activeDevelopmentMode.value])
-const agentOptions = ref<any[]>([
-  { id: 1001, name: '产品服务主智能体' },
-  { id: 1002, name: '业务问答智能体' },
-  { id: 1003, name: '营销助手智能体' },
-])
+const agentOptions = ref<any[]>([])
 const agentVersions = ref<any[]>([])
 const agentVersionsLoading = ref(false)
 const currentAgentName = ref('产品服务主智能体')
@@ -541,49 +537,42 @@ const code = ref('')
 const skillsMd = ref('')
 const skillFiles = ref<Record<string, string>>({})
 const recentLog = ref('等待加载')
-const midTab = ref<'files' | 'debug' | 'versions' | 'logs'>('files')
+// 依赖与架构面板状态
+const editingPlatforms = ref<string[]>([])
+const savingPlatforms = ref(false)
+// 二次开发换绑智能体
+const editingAgentId = ref<string | number>('')
+const editingAgentVersion = ref('')
+const editingAgentVersions = ref<any[]>([])
+const savingBinding = ref(false)
+const dependencyList = computed(() => {
+  const req = skillFiles.value['requirements.txt'] || ''
+  const md = skillFiles.value['SKILL.md'] || ''
+  return [...parseRequirements(req), ...parseSkillFrontmatterDependency(md)]
+})
+const moduleEdges = computed(() => parsePythonImports(skillFiles.value))
+const moduleGraphSvg = computed(() => buildModuleGraphSvg(moduleEdges.value))
+const midTab = ref<'files' | 'deps' | 'debug' | 'versions' | 'logs'>('files')
 const dialogModeChooser = ref(false)
 const selectedMode = ref<'online' | 'local' | 'git'>('online')
 const chatCollapsed = ref(false)
 const creatingSkill = ref(false)
 const templateDatasetId = ref('product-mock')
-const lastTemplateDatasetId = ref('product-mock')
-const templateMenuOpen = ref(false)
-const datasetDetailsOpen = ref(false)
-const showTemplateChooser = ref(false)
 const businessDataset = ref<any | null>(null)
-const customTemplates = ref<any[]>(loadCustomTemplates())
-const hiddenTemplateIds = ref<string[]>(loadHiddenTemplateIds())
-const availableTemplates = computed<any[]>(() => {
-  const merged = new Map(TEST_DATASETS.filter(template => !hiddenTemplateIds.value.includes(template.id)).map(template => [template.id, template]))
-  customTemplates.value.forEach(template => merged.set(template.id, template))
-  return Array.from(merged.values())
-})
+const availableTemplates = computed<any[]>(() => TEST_DATASETS)
 const selectedTemplate = computed<any>(() => availableTemplates.value.find(template => template.id === templateDatasetId.value) || getTestDataset(templateDatasetId.value))
-const selectedDataset = computed<any>(() => businessDataset.value || selectedTemplate.value)
-const datasetTestCases = computed<any[]>(() => businessDataset.value ? getDatasetTestCases(businessDataset.value) : [])
-const selectedTestCaseId = ref('')
 // 后端以该修订号拒绝覆盖其他成员刚保存的草稿；批量初始化文件不携带它，避免彼此冲突。
 const draftRevision = ref<number | undefined>(undefined)
-const selectedTestCase = computed<any>(() => datasetTestCases.value.find(item => item.id === selectedTestCaseId.value) || datasetTestCases.value[0])
-const datasetInputText = computed(() => JSON.stringify(selectedTestCase.value?.input || {}, null, 2))
-const datasetExpectedText = computed(() => JSON.stringify(selectedTestCase.value?.expected || {}, null, 2))
-// 调试数据与"生成约束模板"分开：模板可直接用于快速验证；保存后的业务数据才是正式验收数据。
-const debugDataSource = ref<'template-sample' | 'template-all' | 'business'>('template-sample')
+const debugDataSource = ref<'mock' | 'business'>('mock')
 const selectedDebugCaseId = ref('')
 const debugDataset = computed<any>(() => debugDataSource.value === 'business' && businessDataset.value ? businessDataset.value : selectedTemplate.value)
 const debugTestCases = computed<any[]>(() => getDatasetTestCases(debugDataset.value))
 const selectedDebugCase = computed<any>(() => debugTestCases.value.find(item => item.id === selectedDebugCaseId.value) || debugTestCases.value[0])
 const debugDataSourceLabel = computed(() => {
-  if (debugDataSource.value === 'business' && businessDataset.value) return `已上传业务测试数据"${businessDataset.value.name}"`
-  if (debugDataSource.value === 'template-all') return `模板"${selectedTemplate.value.label}"的完整用例`
-  return `模板"${selectedTemplate.value.label}"`
+  if (debugDataSource.value === 'business' && businessDataset.value) return `当前 Skill 数据“${businessDataset.value.name}”`
+  return `内置 Mock 数据“${selectedTemplate.value.label}”`
 })
 const testDataEditorVisible = ref(false)
-const templatePreviewVisible = ref(false)
-const templateManagerVisible = ref(false)
-const templateEditorText = ref('')
-const templateEditorName = ref('')
 const testDataEditorText = ref('')
 const testDataSaving = ref(false)
 
@@ -614,21 +603,14 @@ watch(midTab, (tab) => {
   if (tab === 'logs') loadOperationLogs(1)
 })
 
-// 模板完整用例展示完整模板 JSON；单条调试才装载某个案例的 input。
 watch([debugDataSource, selectedDebugCaseId, businessDataset, templateDatasetId], () => {
-  if (debugDataSource.value === 'business' && !businessDataset.value) debugDataSource.value = 'template-sample'
+  if (debugDataSource.value === 'business' && !businessDataset.value) debugDataSource.value = 'mock'
   if (!selectedDebugCaseId.value || !debugTestCases.value.some(item => item.id === selectedDebugCaseId.value)) {
     selectedDebugCaseId.value = debugTestCases.value[0]?.id || ''
   }
-  const input = debugDataSource.value === 'template-sample'
-    ? selectedTemplate.value.input
-    : debugDataSource.value === 'template-all'
-      ? selectedTemplate.value
-      : selectedDebugCase.value?.input
+  const input = selectedDebugCase.value?.input || selectedTemplate.value.input
   debugInput.value = JSON.stringify(input || {}, null, 2)
-  debugResult.value = debugDataSource.value === 'template-all'
-    ? `已载入${debugDataSourceLabel.value}（含 ${debugTestCases.value.length} 条 testCases），等待运行全部用例。`
-    : `已载入${debugDataSourceLabel.value}${debugDataSource.value === 'template-sample' ? '的示例输入' : ` · ${selectedDebugCase.value?.name || '默认样例'}`}，等待运行。`
+  debugResult.value = `已载入${debugDataSourceLabel.value} · ${selectedDebugCase.value?.name || '默认样例'}，等待运行。`
   debugFailureLog.value = ''
   lastDebugMeta.value = null
   debugPassed.value = false
@@ -666,7 +648,7 @@ const chatInputRef = ref<HTMLElement | null>(null)
 const initialSuggestions = [
   { text: '生成一个产品信息查询 Skill，输入产品编码返回产品名称、状态和风险等级', datasetId: 'product-mock', templateLabel: '产品查询 Mock 数据', caseLabel: '正常查询、未知编码、参数缺失等 4 条用例' },
   { text: '生成一个文本清洗 Skill，支持去除多余空格、提取关键词和格式校验', datasetId: 'text-processor', templateLabel: '文本处理数据', caseLabel: '清洗、提取、空文本、非法动作等 4 条用例' },
-  { text: '生成一个敏感信息脱敏 Skill，对手机号进行掩码处理', datasetId: 'privacy-mask', templateLabel: '敏感信息脱敏数据', caseLabel: '正常脱敏、空手机号、非法格式等 3 条用例' },
+  { text: '生成一个数据格式转换 Skill，支持对象扁平化、嵌套与字段映射校验', datasetId: 'data-converter', templateLabel: '数据格式转换数据', caseLabel: '扁平化、空数据、非法格式等 3 条用例' },
 ]
 const progressiveSuggestions = computed(() => {
   const userTurns = chatMessages.value.filter(message => message.role === 'user').length
@@ -710,7 +692,9 @@ const newSkill = reactive({
   skillTemplate: 'prompt',
   version: '0.0.0',
   agentName: '',
+  agentId: '' as string | number,
   agentVersion: '',
+  targetPlatforms: [] as string[],
   dataSource: 'mock',
 })
 const localImport = reactive({ alias: '', visibility: 'private' as 'private' | 'team', credentialId: '', message: '', fileName: '', files: {} as Record<string, string>, valid: false, validation: '' })
@@ -887,6 +871,10 @@ function selectDevelopmentMode(mode: 'online' | 'local' | 'git') {
     recentLog.value = 'AI 正在生成文件，请完成后再切换开发模式。'
     return
   }
+  if (newSkill.agentId && !newSkill.agentVersion) {
+    recentLog.value = '请先选择智能体版本。'
+    return
+  }
   activeDevelopmentMode.value = mode
   dialogModeChooser.value = false
   if (mode === 'online') dialogCreate.value = true
@@ -897,24 +885,28 @@ function selectDevelopmentMode(mode: 'online' | 'local' | 'git') {
 
 async function openDevelopmentModeChooser() {
   if (chatStreaming.value) { recentLog.value = 'AI 正在生成文件，请稍后新建。'; return }
-  newSkill.agentName = currentAgentName.value || agentOptions.value[0]?.name || ''
+  newSkill.agentName = ''
+  newSkill.agentId = ''
   newSkill.agentVersion = ''
+  newSkill.targetPlatforms = []
   selectedMode.value = 'online'
-  // 尝试从 API 加载真实智能体列表，合并到预设列表
+  // 从 API 加载真实智能体列表
   try {
     const agents = await agentApi.list()
-    // 添加 API 中有的但预设中没有的智能体
-    for (const a of agents) {
-      if (!agentOptions.value.find(o => o.name === a.name)) {
-        agentOptions.value.push({ id: a.id, name: a.name, currentVersion: a.currentVersion || (a as any).current_version })
-      }
-    }
-    // 如果当前有选中智能体，加载其版本
-    if (newSkill.agentName) {
-      await loadAgentVersions(newSkill.agentName)
+    agentOptions.value = (agents || []).map(a => ({
+      id: a.id,
+      name: a.name,
+      currentVersion: a.current_version || (a as any).currentVersion,
+    }))
+    // 默认选中第一个智能体并加载其版本
+    if (agentOptions.value.length) {
+      newSkill.agentId = agentOptions.value[0].id
+      newSkill.agentName = agentOptions.value[0].name
+      await loadAgentVersions(newSkill.agentId)
     }
   } catch (e: any) {
     console.error('加载智能体列表失败:', e)
+    agentOptions.value = []
   }
   dialogModeChooser.value = true
 }
@@ -922,44 +914,181 @@ async function openDevelopmentModeChooser() {
 async function onAgentNameChange() {
   newSkill.agentVersion = ''
   agentVersions.value = []
-  if (newSkill.agentName) {
-    await loadAgentVersions(newSkill.agentName)
+  // 同步 agentName 供日志展示
+  const agent = agentOptions.value.find(a => String(a.id) === String(newSkill.agentId))
+  newSkill.agentName = agent ? agent.name : ''
+  if (newSkill.agentId) {
+    await loadAgentVersions(newSkill.agentId)
   }
 }
 
-async function loadAgentVersions(agentName: string) {
+function togglePlatform(value: string, arr: string[]) {
+  const idx = arr.indexOf(value)
+  if (idx >= 0) arr.splice(idx, 1)
+  else arr.push(value)
+}
+
+async function savePlatforms() {
+  if (!currentSkill.value) return
+  savingPlatforms.value = true
+  try {
+    await skillApi.update(currentSkill.value.id, { target_platforms: editingPlatforms.value.join(',') } as any)
+    await load()
+    recentLog.value = `已保存运行目标平台：${editingPlatforms.value.join(', ') || '（未指定）'}`
+  } catch (e: any) {
+    alert('保存平台失败：' + e.message)
+  } finally {
+    savingPlatforms.value = false
+  }
+}
+
+/** 确保智能体列表已加载（二次开发换绑时下拉需要） */
+async function ensureAgentOptions() {
+  if (agentOptions.value.length) return
+  try {
+    const agents = await agentApi.list()
+    agentOptions.value = (agents || []).map(a => ({
+      id: a.id,
+      name: a.name,
+      currentVersion: a.current_version || (a as any).currentVersion,
+    }))
+    // 若当前 Skill 未关联智能体，默认选中第一个并加载其版本，
+    // 避免下拉显示第一项但实际值为空的不一致。
+    if (!editingAgentId.value && agentOptions.value.length) {
+      editingAgentId.value = agentOptions.value[0].id
+      await onEditAgentChange()
+    }
+  } catch (e: any) {
+    console.error('加载智能体列表失败:', e)
+  }
+}
+
+/** 二次开发时切换关联智能体，加载该智能体的版本列表 */
+async function onEditAgentChange() {
+  editingAgentVersion.value = ''
+  editingAgentVersions.value = []
+  if (!editingAgentId.value) return
+  try {
+    const versions = await agentApi.listVersions(String(editingAgentId.value))
+    editingAgentVersions.value = versions || []
+    if (editingAgentVersions.value.length) {
+      const currentVersion = agentOptions.value.find(item => String(item.id) === String(editingAgentId.value))?.currentVersion
+      editingAgentVersion.value = editingAgentVersions.value.some(item => item.version === currentVersion)
+        ? currentVersion
+        : editingAgentVersions.value[0].version
+    }
+  } catch (e: any) {
+    console.error('加载智能体版本失败:', e)
+  }
+}
+
+/** 保存关联智能体及版本（换绑） */
+async function saveAgentBinding() {
+  if (!currentSkill.value) return
+  if (editingAgentId.value && !editingAgentVersion.value) {
+    alert('请选择智能体版本。')
+    return
+  }
+  savingBinding.value = true
+  try {
+    await skillApi.updateAgentBinding(currentSkill.value.id, editingAgentId.value || null, editingAgentVersion.value)
+    await load()
+    recentLog.value = editingAgentId.value
+      ? `已更换关联智能体为版本 ${editingAgentVersion.value}`
+      : '已解除智能体关联'
+  } catch (e: any) {
+    alert('更换智能体失败：' + e.message)
+  } finally {
+    savingBinding.value = false
+  }
+}
+
+/**
+ * 用轻量 SVG 绘制 scripts/*.py 之间的 import 调用关系。
+ * 节点按入度分层（main.py 在最左），圆角矩形 + 箭头连线，不依赖外部图库。
+ */
+function buildModuleGraphSvg(edges: { from: string; to: string }[]): string {
+  if (!edges.length) return ''
+  const nodes = new Set<string>()
+  edges.forEach(e => { nodes.add(e.from); nodes.add(e.to) })
+  // 拓扑分层：from 依赖 to，to 在 from 右侧
+  const inDeg: Record<string, number> = {}
+  nodes.forEach(n => { inDeg[n] = 0 })
+  edges.forEach(e => { inDeg[e.to] = (inDeg[e.to] || 0) + 1 })
+  const layers: string[][] = []
+  const placed = new Set<string>()
+  let frontier = [...nodes].filter(n => inDeg[n] === 0)
+  while (frontier.length) {
+    layers.push(frontier)
+    frontier.forEach(n => placed.add(n))
+    const next: string[] = []
+    edges.forEach(e => {
+      if (placed.has(e.from) && !placed.has(e.to)) {
+        inDeg[e.to]--
+        if (inDeg[e.to] === 0 && !next.includes(e.to)) next.push(e.to)
+      }
+    })
+    frontier = next
+  }
+  // 剩余未分层节点（有环）放最后一层
+  ;[...nodes].filter(n => !placed.has(n)).forEach(n => { if (!frontier.includes(n)) frontier.push(n) })
+  if (frontier.length) layers.push(frontier)
+
+  const nodeW = 150, nodeH = 40, gapX = 60, gapY = 16, padX = 16, padY = 16
+  const colX = layers.map((_, i) => padX + i * (nodeW + gapX))
+  const positions: Record<string, { x: number; y: number }> = {}
+  let maxRows = 0
+  layers.forEach((layer, i) => {
+    maxRows = Math.max(maxRows, layer.length)
+    const totalH = layer.length * nodeH + (layer.length - 1) * gapY
+    const startY = padY + Math.max(0, (maxRows * nodeH - totalH) / 2)
+    layer.forEach((n, j) => {
+      positions[n] = { x: colX[i], y: startY + j * (nodeH + gapY) }
+    })
+  })
+  const width = colX[colX.length - 1] + nodeW + padX
+  const height = padY * 2 + maxRows * nodeH + (maxRows - 1) * gapY
+  const short = (p: string) => p.replace(/^scripts\//, '').replace(/\.py$/, '')
+  let svg = `<svg viewBox="0 0 ${width} ${height}" width="100%" style="max-height:320px" xmlns="http://www.w3.org/2000/svg">`
+  // 连线
+  edges.forEach(e => {
+    const a = positions[e.from], b = positions[e.to]
+    if (!a || !b) return
+    const x1 = a.x + nodeW, y1 = a.y + nodeH / 2
+    const x2 = b.x, y2 = b.y + nodeH / 2
+    svg += `<path d="M${x1},${y1} C${x1 + 20},${y1} ${x2 - 20},${y2} ${x2},${y2}" fill="none" stroke="#3c7cf2" stroke-width="1.5"/>`
+    svg += `<polygon points="${x2},${y2} ${x2 - 6},${y2 - 4} ${x2 - 6},${y2 + 4}" fill="#3c7cf2"/>`
+  })
+  // 节点
+  nodes.forEach(n => {
+    const p = positions[n]
+    if (!p) return
+    svg += `<rect x="${p.x}" y="${p.y}" width="${nodeW}" height="${nodeH}" rx="6" fill="#eaf2ff" stroke="#3c7cf2"/>`
+    svg += `<text x="${p.x + nodeW / 2}" y="${p.y + nodeH / 2 + 4}" text-anchor="middle" font-size="12" font-family="monospace" fill="#253650">${short(n)}.py</text>`
+  })
+  svg += `</svg>`
+  return svg
+}
+
+async function loadAgentVersions(agentId: string | number) {
   agentVersionsLoading.value = true
   agentVersions.value = []
   try {
-    // 根据名称找到智能体 ID
-    const agent = agentOptions.value.find(a => a.name === agentName)
-    if (agent && agent.id) {
-      if (agent.id < 1000) {
-        // 真实 API 智能体（ID < 1000），从 API 加载版本
-        const versions = await agentApi.listVersions(String(agent.id))
-        agentVersions.value = versions || []
-      } else {
-        // 预设智能体（ID >= 1000），使用预设版本
-        agentVersions.value = [
-          { version: '1.0.0', changeSummary: '初始版本' },
-          { version: '1.1.0', changeSummary: '功能优化' },
-          { version: '1.2.0', changeSummary: '性能提升' },
-        ]
-      }
+    if (agentId) {
+      const versions = await agentApi.listVersions(String(agentId))
+      agentVersions.value = versions || []
     }
     if (agentVersions.value.length) {
-      newSkill.agentVersion = agentVersions.value[0].version
+      const currentVersion = agentOptions.value.find(item => String(item.id) === String(agentId))?.currentVersion
+      newSkill.agentVersion = agentVersions.value.some(item => item.version === currentVersion)
+        ? currentVersion
+        : agentVersions.value[0].version
     }
   } catch (e: any) {
     console.error('加载智能体版本失败:', e)
   } finally {
     agentVersionsLoading.value = false
   }
-}
-
-function previewTemplate(templateId: string) {
-  selectTemplate(templateId)
-  templatePreviewVisible.value = true
 }
 
 async function selectLocalZip(event: Event) {
@@ -1115,7 +1244,6 @@ async function loadCode() {
     if (savedTestData) {
       try {
         businessDataset.value = validateBusinessTestData(JSON.parse(savedTestData))
-        selectedTestCaseId.value = getDatasetTestCases(businessDataset.value)[0]?.id || ''
       } catch {
         // 保留代码文件，让用户在编辑入口修复不符合格式的测试数据。
         businessDataset.value = null
@@ -1124,6 +1252,12 @@ async function loadCode() {
       businessDataset.value = null
     }
     recentLog.value = `${new Date().toLocaleTimeString('zh-CN')} 加载 ${Object.keys(skillFiles.value).length} 个文件`
+    // 同步运行平台到编辑态
+    editingPlatforms.value = (currentSkill.value?.target_platforms || '').split(',').map(s => s.trim()).filter(Boolean)
+    // 同步关联智能体到编辑态
+    editingAgentId.value = currentSkill.value?.agent_id ? String(currentSkill.value.agent_id) : ''
+    editingAgentVersion.value = currentSkill.value?.agent_version || ''
+    editingAgentVersions.value = editingAgentVersion.value ? [{ version: editingAgentVersion.value }] : []
   } catch {
     code.value = ''
     skillsMd.value = ''
@@ -1138,152 +1272,6 @@ function openTestDataEditor() {
   testDataEditorVisible.value = true
 }
 
-function loadCustomTemplates(): any[] {
-  try {
-    const saved = window.localStorage.getItem('skill-custom-test-templates')
-    const data = saved ? JSON.parse(saved) : []
-    return Array.isArray(data) ? data : []
-  } catch {
-    return []
-  }
-}
-
-function loadHiddenTemplateIds(): string[] {
-  try {
-    const saved = window.localStorage.getItem('skill-hidden-test-template-ids')
-    const data = saved ? JSON.parse(saved) : []
-    return Array.isArray(data) ? data : []
-  } catch {
-    return []
-  }
-}
-
-function normalizeTemplate(data: any) {
-  if (!data || typeof data !== 'object') throw new Error('模板必须是 JSON 对象')
-  const firstCase = Array.isArray(data.testCases) ? data.testCases[0] : null
-  const id = String(data.id || `business-template-${Date.now()}`).trim()
-  const label = String(data.label || data.name || '').trim()
-  if (!label) throw new Error('模板缺少 label 或 name')
-  const input = data.input || firstCase?.input
-  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('模板需要提供 input，或至少一条 testCases.input')
-  return {
-    ...data,
-    id,
-    label,
-    description: String(data.description || '业务自定义测试数据模板'),
-    input,
-    expected: data.expected || firstCase?.expected || {},
-    testCases: Array.isArray(data.testCases) && data.testCases.length ? data.testCases : [{ id: `${id}-sample`, name: '业务初始样例', input, expected: data.expected || {} }],
-  }
-}
-
-function openTemplateManager() {
-  templateEditorText.value = JSON.stringify(selectedTemplate.value, null, 2)
-  templateEditorName.value = selectedTemplate.value.label || selectedTemplate.value.name || ''
-  templateManagerVisible.value = true
-}
-
-function openNewTemplateManager() {
-  templateEditorName.value = ''
-  templateEditorText.value = JSON.stringify({ id: `business-template-${Date.now()}`, name: '', description: '', input: {}, expected: {}, testCases: [] }, null, 2)
-  templateMenuOpen.value = false
-  templateManagerVisible.value = true
-}
-
-function selectTemplate(id: string) {
-  templateDatasetId.value = id
-  lastTemplateDatasetId.value = id
-  templateMenuOpen.value = false
-}
-
-function updateTemplate(template: any) {
-  templateDatasetId.value = template.id
-  lastTemplateDatasetId.value = template.id
-  templateMenuOpen.value = false
-  openTemplateManager()
-}
-
-function isCustomTemplate(id: string) {
-  return customTemplates.value.some(item => item.id === id)
-}
-
-function downloadTemplate(template: any) {
-  const blob = new Blob([JSON.stringify(buildBusinessTestData(template), null, 2) + '\n'], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `${template.label || template.id}.json`
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
-function deleteTemplate(template: any) {
-  if (!window.confirm(`确认删除模板"${template.label}"？`)) return
-  const isCustom = customTemplates.value.some(item => item.id === template.id)
-  if (isCustom) {
-    customTemplates.value = customTemplates.value.filter(item => item.id !== template.id)
-    window.localStorage.setItem('skill-custom-test-templates', JSON.stringify(customTemplates.value))
-  } else {
-    hiddenTemplateIds.value = [...new Set([...hiddenTemplateIds.value, template.id])]
-    window.localStorage.setItem('skill-hidden-test-template-ids', JSON.stringify(hiddenTemplateIds.value))
-  }
-  if (templateDatasetId.value === template.id) {
-    const next = availableTemplates.value.find(item => item.id !== template.id)
-    templateDatasetId.value = next?.id || 'product-mock'
-    lastTemplateDatasetId.value = templateDatasetId.value
-  }
-  templateMenuOpen.value = false
-}
-
-function onTemplateSelection() {
-  if (templateDatasetId.value === '__manage_templates__') {
-    templateDatasetId.value = lastTemplateDatasetId.value
-    openTemplateManager()
-    return
-  }
-  lastTemplateDatasetId.value = templateDatasetId.value
-}
-
-function saveTemplate() {
-  try {
-    const data = JSON.parse(templateEditorText.value)
-    data.label = templateEditorName.value
-    data.name = templateEditorName.value
-    const template = normalizeTemplate(data)
-    const index = customTemplates.value.findIndex(item => item.id === template.id)
-    const next = [...customTemplates.value]
-    if (index >= 0) next[index] = template
-    else next.push(template)
-    customTemplates.value = next
-    window.localStorage.setItem('skill-custom-test-templates', JSON.stringify(next))
-    hiddenTemplateIds.value = hiddenTemplateIds.value.filter(id => id !== template.id)
-    window.localStorage.setItem('skill-hidden-test-template-ids', JSON.stringify(hiddenTemplateIds.value))
-    templateDatasetId.value = template.id
-    lastTemplateDatasetId.value = template.id
-    templateManagerVisible.value = false
-    recommendationNotice.value = `已保存业务模板"${template.label}"，后续生成可直接选择使用。`
-  } catch (e: any) {
-    alert(`模板格式错误：${e.message}`)
-  }
-}
-
-function importTemplate(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0]
-  if (!file) return
-  const reader = new FileReader()
-  reader.onload = () => {
-    const text = String(reader.result || '')
-    templateEditorText.value = text
-    try {
-      const data = JSON.parse(text)
-      templateEditorName.value = String(data.label || data.name || file.name.replace(/\.json$/i, '')).trim()
-    } catch {
-      templateEditorName.value = file.name.replace(/\.json$/i, '')
-    }
-  }
-  reader.readAsText(file, 'utf-8')
-}
-
 async function saveBusinessTestData() {
   try {
     const data = validateBusinessTestData(JSON.parse(testDataEditorText.value))
@@ -1294,7 +1282,8 @@ async function saveBusinessTestData() {
       skillFiles.value = { ...skillFiles.value, 'references/test-data.json': JSON.stringify(data, null, 2) + '\n' }
     }
     businessDataset.value = data
-    selectedTestCaseId.value = getDatasetTestCases(data)[0]?.id || ''
+    debugDataSource.value = 'business'
+    selectedDebugCaseId.value = getDatasetTestCases(data)[0]?.id || ''
     testDataEditorVisible.value = false
     recentLog.value = currentSkill.value
       ? '调试测试数据已保存到 references/test-data.json，并已同步到调试区。'
@@ -1306,12 +1295,6 @@ async function saveBusinessTestData() {
   }
 }
 
-function createBusinessFromTemplate() {
-  // 模板只用于预填充编辑草稿；只有点击"保存并使用"才成为当前 Skill 的正式测试数据。
-  testDataEditorText.value = JSON.stringify(buildBusinessTestData(selectedTemplate.value), null, 2)
-  testDataEditorVisible.value = true
-}
-
 /* ==================== AI 对话 ==================== */
 function clearChat() {
   chatMessages.value = []
@@ -1320,10 +1303,9 @@ function clearChat() {
 function useSuggestion(suggestion: typeof initialSuggestions[number]) {
   chatInput.value = suggestion.text
   templateDatasetId.value = suggestion.datasetId
-  lastTemplateDatasetId.value = suggestion.datasetId
-  debugDataSource.value = 'template-sample'
+  debugDataSource.value = 'mock'
   selectedDebugCaseId.value = getDatasetTestCases(getTestDataset(suggestion.datasetId))[0]?.id || ''
-  recommendationNotice.value = `已选择"${suggestion.templateLabel}"：它会约束本轮生成，并提供"${suggestion.caseLabel}"作为调试示例。业务测试数据需由业务人员另行保存后再用于正式验收。`
+  recommendationNotice.value = `已选择"${suggestion.templateLabel}"，可用"${suggestion.caseLabel}"在调试区快速验证。`
   chatInputRef.value?.focus()
 }
 
@@ -1396,8 +1378,7 @@ async function sendChat() {
   chatAbortController.value = abortController
   try {
     const token = localStorage.getItem('token')
-    const skillContext = buildSkillContext()
-    const resp = await fetch('/race-api/chat/stream', {
+    const resp = await fetch('/race-api/chat/skill-creator/stream', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1405,8 +1386,10 @@ async function sendChat() {
       },
       signal: abortController.signal,
       body: JSON.stringify({
+        skillName: currentSkill.value?.name || '',
+        skillVersion: currentSkill.value?.version || '0.0.0',
+        files: pendingBaseline.value,
         messages: [
-          { role: 'system', content: skillContext },
           ...chatMessages.value
             .filter(m => m !== assistantMsg)
             .slice(-8)
@@ -1486,6 +1469,16 @@ async function sendChat() {
             assistantMsg.content += chunk.content
             // 实时提取代码块并更新中栏文件
             streamCodeToFiles(assistantMsg.content)
+          } else if (chunk.type === 'file') {
+            const path = String(chunk.path || '').replace(/^\.\//, '')
+            if (path && !path.startsWith('/') && !path.includes('..') && !path.includes(':')) {
+              const content = String(chunk.content || '')
+              lastFileContents[path] = content
+              skillFiles.value = { ...skillFiles.value, [path]: content }
+              if (path === currentSkill.value?.entry_file || path === 'scripts/main.py') code.value = content
+              if (path === 'SKILL.md') skillsMd.value = content
+              updateStreamingView(path)
+            }
           } else if (chunk.type === 'done') {
             assistantMsg.thinkingStream = false
           } else if (chunk.type === 'usage') {
@@ -1540,99 +1533,17 @@ function buildSkillContext() {
     .map(([path, content]) => `### ${path}\n\`\`\`\n${String(content).slice(0, 12000)}\n\`\`\``)
     .join('\n\n') || '（这是一个新 Skill，当前还没有文件。）'
 
-  return `你是企业级智能体平台的 Skill 开发助手。当前 Skill 名称：${currentSkill.value?.name || '未命名 Skill'}。
+  return `当前 Skill 名称：${currentSkill.value?.name || '未命名 Skill'}。
 
-## 你的任务
+## 本轮目标
 ${snapshot === '（这是一个新 Skill，当前还没有文件。）' ? '创建一个新的 Skill。' : '基于当前文件快照进行最小必要改动，未要求修改的文件不要删除或重写。'}
 
-## 输出格式
-必须同时输出以下文件，缺一不可：
-
-\`\`\`markdown file=SKILL.md
----
-name: ${currentSkill.value?.name || 'skill-name'}
-name_zh: Skill 中文名称
-description: 100-150字符，说明能力价值和触发场景
-version: ${currentSkill.value?.version || '0.0.0'}
-tags: 业务领域,能力标签
-runEnv: all
-digestValue: pending
----
-
-# Skill 标题
-
-## 简介
-简要描述 Skill 的能力。
-
-## 输入
-- 字段名：类型，是否必填，说明
-
-## 输出
-- 字段名：类型，说明
-
-## 异常处理
-- 错误场景与返回值
-\`\`\`
-
-\`\`\`python file=scripts/main.py
-from scripts.validators import validate_input
-from scripts.mock_data import build_mock_result
-
-
-def handle(input_data: dict) -> dict:
-    """Skill 入口函数。"""
-    error = validate_input(input_data)
-    if error:
-        return {"error": error}
-    return build_mock_result(input_data)
-\`\`\`
-
-\`\`\`python file=scripts/validators.py
-def validate_input(input_data: dict) -> str:
-    """校验输入参数，合法时返回空字符串，否则返回错误信息。"""
-    if not isinstance(input_data, dict):
-        return "input_data 必须是 JSON 对象"
-    return ""
-\`\`\`
-
-\`\`\`python file=scripts/mock_data.py
-# Mock 数据表，开发阶段使用，后续可替换为数据库 API
-_MOCK_DATA = {}
-
-
-def build_mock_result(input_data: dict) -> dict:
-    """根据输入返回 Mock 数据。"""
-    return dict(input_data)
-\`\`\`
-
-\`\`\`text file=requirements.txt
-# 仅使用 Python 标准库时写明；如引入第三方库，逐行声明版本
-\`\`\`
-
-\`\`\`markdown file=references/implementation-notes.md
-# 参考说明
-- 输入字段、输出契约、Mock 数据来源与业务规则
-\`\`\`
-
-## 关键规则
-1. **禁止自我导入**：\`validators.py\` 中不能 \`from scripts.validators import\`，\`mock_data.py\` 中不能 \`from scripts.mock_data import\`
-2. **handle() 是纯函数**：不依赖外部状态，输入 dict 输出 dict
-3. **错误返回格式**：\`{"error": "中文错误提示"}\`
-4. **禁止生成**：独立 YAML 文件、README.md、空文件、绝对路径、外部 URL
-5. **文件路径**：只能使用相对路径（SKILL.md、scripts/、references/）
-
-## 验收契约
-平台会自动用测试数据逐条验证：
-1. 对每条 testCase，\`handle(testCase.input)\` 返回的 dict 必须包含 \`testCase.expected.contains\` 中的全部键值对
-2. 输入直接就是 testCase.input 对象，不要再包一层 data
-3. 错误场景返回 \`{"error": 与预期一致的中文提示}\`
-
-## 测试数据模板
-名称：${selectedTemplate.value.label}
-说明：${selectedTemplate.value.description}
-示例输入：${JSON.stringify(selectedTemplate.value.input, null, 2)}
-示例输出：${JSON.stringify(selectedTemplate.value.expected, null, 2)}
-完整用例：${JSON.stringify(buildBusinessTestData(selectedTemplate.value), null, 2).slice(0, 8000)}
+## 平台约束
+- SKILL.md 是唯一必需文件，保持简洁并描述触发条件、关键步骤和边界。
+- 只有在确定性执行能提高稳定性时才创建 scripts/；如创建 Python 调试入口，在 scripts/main.py 实现 handle(input_data)。
+- 只有实际存在第三方依赖时才创建 requirements.txt。
+- 大型字段规则、业务资料或按需加载的详细指南放入 references/，并从 SKILL.md 明确链接。
+- 不创建占位文件或与当前需求无关的示例。
 
 ## 当前文件快照
 ${snapshot}`
@@ -1817,10 +1728,7 @@ function validateGeneratedSkillFiles(files: Record<string, string>): string[] {
   const skillMd = files['SKILL.md'] || ''
 
   if (!hasOwn('SKILL.md')) issues.push('缺少 SKILL.md')
-  if (!hasOwn('requirements.txt')) issues.push('缺少 requirements.txt')
-  if (!paths.some(path => path.startsWith('scripts/'))) issues.push('缺少 scripts/ 下的可执行代码')
-  if (!paths.some(path => path.startsWith('references/'))) issues.push('缺少 references/ 下的参考资料')
-  if (!hasOwn('scripts/main.py')) issues.push('缺少调试入口 scripts/main.py')
+  if (paths.some(path => path.startsWith('scripts/')) && !hasOwn('scripts/main.py')) issues.push('已生成 scripts/ 但缺少调试入口 scripts/main.py')
 
   for (const [path, value] of Object.entries(files)) {
     if (!path || path.startsWith('/') || path.includes('..') || path.includes(':')) issues.push(`文件路径不合法：${path}`)
@@ -1845,7 +1753,7 @@ function validateGeneratedSkillFiles(files: Record<string, string>): string[] {
       if (!/^name_zh:\s*\S+/m.test(frontmatter[1])) issues.push('SKILL.md 前言区缺少 name_zh')
       if (!/^description:\s*\S+/m.test(frontmatter[1])) issues.push('SKILL.md 前言区缺少 description')
       if (!/^version:\s*\d+\.\d+\.\d+\s*$/m.test(frontmatter[1])) issues.push('SKILL.md 前言区缺少合法 version（x.y.z）')
-      if (!/^tags:\s*\S+/m.test(frontmatter[1])) issues.push('SKILL.md 前言区缺少 tags')
+      if (!/^tags:\s*(?:\S.*|\n[ \t]+-\s+\S.*)$/m.test(frontmatter[1])) issues.push('SKILL.md 前言区缺少 tags')
       if (!/^runEnv:\s*\S+/m.test(frontmatter[1])) issues.push('SKILL.md 前言区缺少 runEnv')
       if (!/^digestValue:\s*\S+/m.test(frontmatter[1])) issues.push('SKILL.md 前言区缺少 digestValue')
     }
@@ -1970,7 +1878,7 @@ ${md.trim() || '（待补充使用说明）'}`
     }
     files['SKILL.md'] = md
   }
-  if (!files['requirements.txt']) {
+  if (generatedMain && !files['requirements.txt']) {
     files['requirements.txt'] = '# 当前 Skill 仅使用 Python 标准库\n'
   }
   if (files['scripts/main.py'] && !/def\s+handle\s*\(/.test(files['scripts/main.py'])) {
@@ -1984,81 +1892,6 @@ ${md.trim() || '（待补充使用说明）'}`
  * - 本轮新增的文件直接写入工作区，不展示"新文件 vs 空文件"的无意义 Diff；
  * - 仅已存在文件的内容变更需要用户确认后应用。
  */
-/** 按模板契约生成一定可通过验收的参考实现，用于 AI 生成代码未通过契约时校准。 */
-function buildContractReferenceMain(dataset: any): string {
-  if (dataset?.id === 'product-mock') {
-    return `from typing import Any, Dict
-
-PRODUCT_DB: Dict[str, Dict[str, Any]] = {
-    "000001": {"product_name": "示例产品", "risk_level": "R2", "latest_status": "正常", "change_rate": "2.36%"},
-    "110022": {"product_name": "高风险产品", "risk_level": "R5", "latest_status": "关注", "change_rate": "-3.14%", "risk_warning": "高风险产品"},
-}
-
-
-def handle(input_data: Dict[str, Any]) -> Dict[str, Any]:
-    if not isinstance(input_data, dict):
-        return {"error": "input_data 必须是 JSON 对象"}
-
-    product_code = input_data.get("product_code", "")
-    if not product_code:
-        return {"error": "product_code 不能为空"}
-
-    record = PRODUCT_DB.get(product_code)
-    if record is None:
-        return {"error": "产品不存在"}
-
-    return {"product_code": product_code, **record}
-`
-  }
-  const cases = getDatasetTestCases(dataset).map(item => ({ input: item.input, result: item.expected?.contains || item.expected || {} }))
-  return `import json
-
-CASE_TABLE = json.loads('''${JSON.stringify(cases)}''')
-
-
-def handle(input_data: dict) -> dict:
-    if not isinstance(input_data, dict):
-        return {"error": "input_data 必须是 JSON 对象"}
-    for case in CASE_TABLE:
-        case_input = case.get("input") or {}
-        if all(input_data.get(key) == value for key, value in case_input.items()):
-            return dict(case.get("result") or {})
-    return {"error": "未匹配的业务输入"}
-`
-}
-
-/** 生成后自动按当前模板契约验证草稿；未通过时用参考实现校准 scripts/main.py。 */
-async function autoCalibrateToContract() {
-  if (!currentSkill.value) return
-  const cases = getDatasetTestCases(selectedTemplate.value)
-  if (!cases.length) return
-  let allPassed = true
-  for (const testCase of cases) {
-    try {
-      const result = await skillApi.debug(currentSkill.value.id, JSON.stringify(testCase.input))
-      let ok = result.status === 'PASS'
-      if (ok && testCase.expected?.contains) {
-        try { ok = matchesContains(parseRunnerOutput(result.output), testCase.expected.contains) } catch { ok = false }
-      }
-      if (!ok) { allPassed = false; break }
-    } catch {
-      allPassed = false
-      break
-    }
-  }
-  if (allPassed) return
-  const main = buildContractReferenceMain(selectedTemplate.value)
-  try {
-    const saved = await skillApi.saveCode(currentSkill.value.id, main, 'scripts/main.py', draftRevision.value)
-    draftRevision.value = typeof saved?.draftRevision === 'number' ? saved.draftRevision : draftRevision.value
-    skillFiles.value = { ...skillFiles.value, 'scripts/main.py': main }
-    code.value = main
-    recentLog.value = `${new Date().toLocaleTimeString('zh-CN')} AI 生成的脚本未通过验收契约，平台已按模板契约自动校准 scripts/main.py，快速验证与全量测试现在可通过。`
-  } catch (e: any) {
-    recentLog.value = `契约校准保存失败：${e.message}`
-  }
-}
-
 async function finalizeCodeToFiles(content: string) {
   if (!currentSkill.value) return
   codeStreamSwitched = false
@@ -2078,7 +1911,6 @@ async function finalizeCodeToFiles(content: string) {
   if (files['SKILL.md']) {
     files['SKILL.md'] = files['SKILL.md'].replace(/^(digestValue:)\s*$/m, '$1 pending')
   }
-  autoFillSkillCompliance(files)
   if (Object.keys(files).length === 0) {
     recentLog.value = '本轮 AI 未返回符合协议的文件变更。'
     restoreBaselinePreview()
@@ -2318,10 +2150,6 @@ async function runDebug() {
     debugResult.value = '请先选择一个 Skill'
     return
   }
-  if (debugDataSource.value === 'template-all') {
-    await runAllTestCases()
-    return
-  }
   try {
     parseDebugInput(debugInput.value)
     debugRunning.value = true
@@ -2374,10 +2202,8 @@ function parseRunnerOutput(output: string) {
 
 async function runAllTestCases() {
   if (!currentSkill.value) return
-  const cases = debugDataSource.value === 'template-sample'
-    ? [{ id: 'template-sample', name: `${selectedTemplate.value.label} · 示例输入`, input: selectedTemplate.value.input, expected: { contains: selectedTemplate.value.expected || {} } }]
-    : debugTestCases.value
-  if (!cases.length) { debugResult.value = '当前模板没有可运行的测试用例。'; return }
+  const cases = debugTestCases.value
+  if (!cases.length) { debugResult.value = '当前数据集没有可运行的测试用例。'; return }
   midTab.value = 'debug'
   debugRunning.value = true
   debugHistory.value = []
@@ -2403,7 +2229,7 @@ async function runAllTestCases() {
       else failures.push(`${testCase.name}：${detail}`)
     }
     debugPassed.value = passed === cases.length
-    debugResult.value = `全量用例运行完成：${passed}/${cases.length} 通过。${debugDataSource.value === 'business' ? '本次使用已上传业务测试数据。' : '本次使用模板数据；业务人员保存实际测试数据后，可切换为正式验收。'}`
+    debugResult.value = `全量用例运行完成：${passed}/${cases.length} 通过。本次使用${debugDataSource.value === 'business' ? '当前 Skill 测试数据' : '内置 Mock 数据'}。`
     debugFailureLog.value = failures.join('\n\n')
     recentLog.value = debugPassed.value ? '全部业务测试用例通过。' : `有 ${failures.length} 条业务测试用例失败。`
   } catch (e: any) {
@@ -2549,8 +2375,14 @@ async function createSkill() {
     alert('初始版本需使用 x.y.z 格式，例如 0.0.0。')
     return
   }
+  if (newSkill.agentId && !newSkill.agentVersion) {
+    alert('请选择智能体版本。')
+    return
+  }
   if (creatingSkill.value) return
   creatingSkill.value = true
+  const selectedAgentName = newSkill.agentName
+  const selectedAgentVersion = newSkill.agentVersion
   try {
     const skill = await skillApi.create({
       name,
@@ -2560,6 +2392,9 @@ async function createSkill() {
       code_path: newSkill.credentialId ? gitCredentials.value.find(item => item.id === newSkill.credentialId)?.repoUrl : undefined,
       version: newSkill.version,
       tags: [],
+      agent_id: newSkill.agentId || undefined,
+      agent_version: newSkill.agentVersion || undefined,
+      target_platforms: newSkill.targetPlatforms.length ? newSkill.targetPlatforms.join(',') : undefined,
     } as any)
     dialogCreate.value = false
     newSkill.name = ''
@@ -2567,12 +2402,18 @@ async function createSkill() {
     newSkill.credentialId = ''
     newSkill.version = '0.0.0'
     newSkill.agentName = ''
+    newSkill.agentId = ''
+    newSkill.agentVersion = ''
+    newSkill.targetPlatforms = []
     newSkill.dataSource = 'mock'
     await load()
     currentSkillId.value = skill.id
     await loadCode()
     activeFile.value = 'SKILL.md'
     await router.replace({ path: '/skill-workbench', query: { skillId: skill.id } })
+    if (selectedAgentName || skill.agent_name) {
+      recentLog.value = `已创建 Skill 并挂载到智能体「${skill.agent_name || selectedAgentName}」版本 ${skill.agent_version || selectedAgentVersion}`
+    }
   } catch (e: any) {
     alert('创建失败：' + e.message)
   } finally {
@@ -2609,6 +2450,10 @@ async function createSkill() {
 .debug-mode-note { margin-bottom: 7px; padding: 7px 9px; border-radius: 4px; background: #eef7f6; color: #177b75; font-size: 12px; }
 .debug-panel { flex: 1; min-height: 0; overflow-y: auto; margin-top: 8px; border: 1px solid var(--line); border-radius: 6px; padding: 9px; background: #fff; }.debug-panel-head { display: flex; justify-content: space-between; align-items: center; margin: -9px -9px 9px; padding: 7px 9px; border-bottom: 1px solid var(--line); background: #f7fbfb; color: var(--ink); font-size: 12px; }.debug-panel-head span { color: var(--muted); font-size: 10px; }
 .debug-test-data { margin-top: 10px; padding: 10px; border: 1px solid #cfe3e3; border-radius: 6px; background: #f8fcfc; }.debug-test-data .dataset-title { margin-bottom: 8px; }.debug-test-data .hint { margin: 0 0 8px; font-size: 11px; }
+.debug-data-card { margin-top: 10px; padding: 12px; border: 1px solid #cfe3e3; border-radius: 8px; background: linear-gradient(180deg, #fbfefe 0%, #f5fbfa 100%); }
+.debug-data-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }.debug-data-title div { display: flex; flex-direction: column; gap: 3px; }.debug-data-title span { color: var(--muted); font-size: 11px; }
+.debug-data-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }.debug-data-grid label { display: flex; min-width: 0; flex-direction: column; gap: 5px; color: #526a7a; font-size: 11px; }
+.debug-run-actions { display: flex; gap: 8px; margin-top: 10px; }
 .debug-dataset-sync { margin: 4px 0 7px; color: #167e78; font-size: 11px; }
 .debug-meta { display: flex; gap: 22px; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--line); color: #526a7a; font-size: 12px; }.debug-meta .pass { color: #059669; font-weight: 700; }.debug-meta .fail { color: #dc2626; font-weight: 700; }
 .debug-error-log { margin-top: 10px; padding: 9px; border: 1px solid #f1b4b4; border-radius: 4px; background: #fff7f7; color: #8f2828; }.debug-error-log pre { max-height: 240px; margin: 6px 0 0; overflow: auto; white-space: pre-wrap; word-break: break-word; font: 11px/1.55 ui-monospace, monospace; }
@@ -3333,4 +3178,23 @@ async function createSkill() {
 .diff-side { flex: 1; padding: 8px 12px; }
 .diff-side .diff-label { display: block; font-size: 11px; color: #8490a2; margin-bottom: 5px; }
 .diff-side pre { margin: 0; font-size: 12px; font-family: ui-monospace, monospace; white-space: pre-wrap; word-break: break-all; }
+
+/* 依赖与架构面板 */
+.deps-panel { padding: 12px 16px; }
+.deps-section-title { margin: 14px 0 8px; font-size: 13px; color: #253650; }
+.deps-section-title small { font-weight: normal; color: #8490a2; margin-left: 6px; }
+.deps-table-wrap { overflow-x: auto; }
+.deps-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.deps-table th { text-align: left; padding: 6px 10px; background: #f5f7fa; color: #5a6577; font-weight: 600; border-bottom: 1px solid #e6ebf2; }
+.deps-table td { padding: 6px 10px; border-bottom: 1px solid #f0f3f7; }
+.deps-table code { font-family: ui-monospace, monospace; background: #f5f7fa; padding: 1px 5px; border-radius: 3px; }
+.dep-source { font-size: 11px; color: #3c7cf2; background: #eaf2ff; padding: 1px 6px; border-radius: 10px; }
+.platform-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.platform-chip { padding: 4px 12px; border: 1px solid #cfd9e6; border-radius: 16px; background: #fff; color: #5a6577; font-size: 12px; cursor: pointer; transition: all .15s; }
+.platform-chip:hover { border-color: #3c7cf2; color: #3c7cf2; }
+.platform-chip.active { background: #3c7cf2; border-color: #3c7cf2; color: #fff; }
+.agent-binding-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.agent-binding-row .input { max-width: 260px; }
+.module-graph { background: #fff; border: 1px solid #eef2f7; border-radius: 6px; padding: 8px; overflow-x: auto; }
+.module-graph :deep(svg) { display: block; }
 </style>

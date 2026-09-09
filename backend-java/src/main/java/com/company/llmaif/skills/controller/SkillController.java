@@ -89,6 +89,18 @@ public class SkillController {
         return ResponseBase.success(null);
     }
 
+    /**
+     * 二次开发时更换 Skill 关联的智能体及版本。
+     * agentId 传空表示解除关联。
+     */
+    @PutMapping("/{id}/agent-binding")
+    public ResponseBase<Void> updateAgentBinding(@PathVariable Long id,
+                                                  @RequestParam(required = false) Long agentId,
+                                                  @RequestParam(required = false) String agentVersion) {
+        skillService.updateAgentBinding(id, agentId, agentVersion);
+        return ResponseBase.success(null);
+    }
+
     /** 获取 NAS 中的当前草稿文件。 */
     @GetMapping("/{id}/code")
     public ResponseBase<SkillCodeVO> getCode(@PathVariable Long id) {

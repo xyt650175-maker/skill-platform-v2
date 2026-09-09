@@ -41,4 +41,9 @@ public class UpdateSkillDTO {
      * 入口文件
      */
     private String entryFile;
+
+    /**
+     * 运行目标平台，逗号分隔，如 x86_64,arm64
+     */
+    private String targetPlatforms;
 }

@@ -24,4 +24,9 @@ public class ChatController {
     public SseEmitter stream(@Valid @RequestBody ChatRequestDTO dto) {
         return chatService.stream(dto);
     }
+
+    @PostMapping(value = "/skill-creator/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamSkillCreator(@Valid @RequestBody ChatRequestDTO dto) {
+        return chatService.streamSkillCreator(dto);
+    }
 }

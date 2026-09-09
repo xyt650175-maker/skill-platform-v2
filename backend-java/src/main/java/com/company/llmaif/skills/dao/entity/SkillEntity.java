@@ -65,6 +65,16 @@ public class SkillEntity implements Serializable {
     private String entryFile;
 
     /**
+     * 运行目标平台，逗号分隔，如 x86_64,arm64,linux-x86_64
+     */
+    private String targetPlatforms;
+
+    /**
+     * 依赖摘要 JSON（包名/版本/来源），由后端解析 requirements.txt 与 SKILL.md 前言区缓存
+     */
+    private String dependencySummary;
+
+    /**
      * 创建人ID
      */
     private Long creatorId;

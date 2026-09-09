@@ -15,7 +15,7 @@
     </div>
 
     <section class="page-content">
-      <div class="notice">图感知闭环：先还原 Badcase 实际经过的主 Agent—SubAgent—Skill 路径，再按问题节点拆分任务；只有相关节点验证完成，才重组新的完整云虾图版本。</div>
+      <div class="notice">图感知闭环：先还原 Badcase 实际经过的主 Agent—SubAgent—Skill 路径，再按问题节点拆分任务；只有相关节点验证完成，才重组新的完整平台图版本。</div>
 
       <!-- 失败路径 -->
       <section class="panel">
@@ -60,7 +60,7 @@
           </div>
           <div class="work">
             <div class="work-top">
-              <b>Task C：绑定关系与云虾图版本</b>
+              <b>Task C：绑定关系与平台图版本</b>
               <span :class="['state', taskC==='通过'?'':'wait']">{{ taskC }}</span>
             </div>
             <div class="hint">负责人：系统管理员。将 Candidate 4 绑定到"产品比较 SubAgent"，生成新的装配图。</div>
@@ -83,16 +83,16 @@
             <div class="hint">验证"产品比较"意图是否正确路由至目标 SubAgent。</div>
           </div>
           <div class="work">
-            <b>4. 完整云虾批量回归</b>
+            <b>4. 完整平台批量回归</b>
             <div class="hint">{{ testState }}</div>
             <button class="btn" @click="runRegression" :disabled="!doneC || !!regressionDone">{{ runBtn }}</button>
           </div>
         </section>
       </div>
 
-      <!-- 云虾图版本与定版 -->
+      <!-- 平台图版本与定版 -->
       <section class="panel" style="margin-top:12px">
-        <h3>云虾图版本与定版</h3>
+        <h3>平台图版本与定版</h3>
         <div class="pad">
           <div class="box">
             <b>v2.0 图版本变更</b>
@@ -119,7 +119,7 @@ const released = ref<boolean>(false)
 
 const btnA = ref('验证 SubAgent 场景测试')
 const btnB = ref('完成 Skill 单测')
-const btnC = ref('重组云虾 v2.0 图版本')
+const btnC = ref('重组平台 v2.0 图版本')
 const runBtn = ref('执行图版本回归')
 const releaseBtn = ref('管理员定版 v2.0')
 
@@ -141,14 +141,14 @@ const pendingCount = computed(() => {
 
 const testState = computed(() => {
   if (regressionDone.value) return '图版本回归通过；准确率 92%、平均耗时 1.7s、无新增严重 Badcase。'
-  if (doneC.value) return '图版本已重组；可执行 SubAgent 场景、路由集成和完整云虾回归。'
+  if (doneC.value) return '图版本已重组；可执行 SubAgent 场景、路由集成和完整平台回归。'
   return '等待图版本重组后，使用原 Case #07 和全量集成测试集回归。'
 })
 
 const releaseMsg = computed(() => {
   if (released.value) return 'v2.0 图版本已定版发布。'
   if (regressionDone.value) return '全部节点任务与分层测试通过；准确率 92%、平均耗时 1.7s、无新增严重 Badcase，允许系统管理员定版。'
-  return '等待：Task A、Task B、Task C 均完成；SubAgent 场景测试、路由集成测试、完整云虾回归全部通过；准确率 ≥ 90%、平均耗时 ≤ 2.0s、无新增严重 Badcase。'
+  return '等待：Task A、Task B、Task C 均完成；SubAgent 场景测试、路由集成测试、完整平台回归全部通过；准确率 ≥ 90%、平均耗时 ≤ 2.0s、无新增严重 Badcase。'
 })
 
 function doA() {

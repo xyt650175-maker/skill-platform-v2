@@ -8,23 +8,12 @@
     </header>
     <div class="app-layout">
       <aside class="app-nav">
-        <button :class="['nav-btn', { active: activeNav === 'workbench' }]" @click="selectNav('workbench', '/agents')">工作台</button>
-        <button :class="['nav-btn', { active: activeNav === 'my-agents' }]" @click="selectNav('my-agents', '/teamagents')">我的智能体</button>
-        <button :class="['nav-btn', { active: activeNav === 'agent-center' }]" @click="selectNav('agent-center', '/agents')">智能体中心</button>
-        <button :class="['nav-btn', { active: activeNav === 'mcp-market' }]" @click="selectNav('mcp-market', '/skills')">MCP 超市</button>
-        <div class="nav-divider"></div>
         <button class="nav-group nav-group-toggle" @click="skillMenuOpen = !skillMenuOpen">技能 <span>{{ skillMenuOpen ? '⌄' : '›' }}</span></button>
         <div v-show="skillMenuOpen">
           <button :class="['nav-btn nav-child', { active: activeNav === 'skill-management' }]" @click="selectNav('skill-management', '/skills')">技能管理</button>
           <button :class="['nav-btn nav-child', { active: activeNav === 'skill-development' }]" @click="selectNav('skill-development', '/skill-workbench?new=1')">技能开发</button>
+          <button :class="['nav-btn nav-child', { active: activeNav === 'review-center' }]" @click="selectNav('review-center', '/reviews')">审核中心</button>
         </div>
-        <button :class="['nav-btn', { active: activeNav === 'review-center' }]" @click="selectNav('review-center', '/reviews')">审核中心</button>
-        <div class="nav-divider"></div>
-        <button :class="['nav-btn', { active: activeNav === 'personal-space' }]" @click="selectNav('personal-space', '/team')">个人空间</button>
-        <button :class="['nav-btn', { active: activeNav === 'system-management' }]" @click="selectNav('system-management', '/team')">系统管理</button>
-        <button :class="['nav-btn', { active: activeNav === 'team-space' }]" @click="selectNav('team-space', '/teamagents')">团队空间</button>
-        <button :class="['nav-btn', { active: activeNav === 'agent-evaluation' }]" @click="selectNav('agent-evaluation', '/eval')">智能体评测</button>
-        <button :class="['nav-btn', { active: activeNav === 'ops-management' }]" @click="selectNav('ops-management', '/loop')">Ops 管理</button>
       </aside>
       <main class="app-main">
         <router-view v-slot="{ Component }">
@@ -47,16 +36,11 @@ const auth = useAuthStore()
 const initialNavByPath: Record<string, string> = {
   '/skills': 'skill-management',
   '/skill-workbench': 'skill-development',
-  '/agents': 'agent-center',
-  '/eval': 'review-center',
   '/reviews': 'review-center',
-  '/teamagents': 'my-agents',
-  '/team': 'personal-space',
-  '/loop': 'ops-management',
 }
 // 导航高亮由当前路由唯一决定。业务页面内部 router.push/replace 后也会同步，
 // 避免“创建 Skill → 我的开发”仍保留 Skill 管理高亮。
-const activeNav = computed(() => initialNavByPath[route.path] || 'workbench')
+const activeNav = computed(() => initialNavByPath[route.path] || '')
 const skillMenuOpen = ref(true)
 
 function selectNav(_id: string, target: string) {

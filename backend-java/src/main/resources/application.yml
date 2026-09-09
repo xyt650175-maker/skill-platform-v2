@@ -93,6 +93,11 @@ llmaif:
     api-key-required: false
     default-model: ${OLLAMA_MODEL:qwen2.5:3b}
     timeout-seconds: 180
+  deep-agent:
+    enabled: ${DEEPAGENT_ENABLED:true}
+    python-executable: ${DEEPAGENT_PYTHON:python3}
+    runtime-script: ${DEEPAGENT_RUNTIME_SCRIPT:deepagent-runtime/runtime.py}
+    timeout-seconds: ${DEEPAGENT_TIMEOUT_SECONDS:300}
   security:
     credential-encryption-key: ${GIT_CREDENTIAL_ENCRYPTION_KEY:}
 

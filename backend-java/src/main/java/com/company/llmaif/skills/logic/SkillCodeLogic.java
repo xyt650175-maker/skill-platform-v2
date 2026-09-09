@@ -18,6 +18,7 @@ import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Comparator;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -87,6 +88,11 @@ public class SkillCodeLogic {
         gitService.commitWorkingTree(skill, dto.getEntryFile());
         gitService.archiveDraft(skill);
         skill.setDraftRevision(currentRevision + 1);
+        // 保存 requirements.txt 或 SKILL.md 时，刷新依赖摘要缓存。
+        // 前端仍以实时解析为主，此摘要仅供列表页兜底展示，避免重复解析。
+        if ("requirements.txt".equals(dto.getEntryFile()) || "SKILL.md".equals(dto.getEntryFile())) {
+            skill.setDependencySummary(buildDependencySummary(getDraftRoot(skill)));
+        }
         skillDAO.updateById(skill);
         return getCode(skillId);
     }
@@ -212,7 +218,8 @@ public class SkillCodeLogic {
     }
 
     private void requireFrontmatterField(String frontmatter, String field) {
-        Pattern pattern = Pattern.compile("(?m)^" + Pattern.quote(field) + ":\\s*\\S+");
+        Pattern pattern = Pattern.compile("(?m)^" + Pattern.quote(field)
+                + ":\\s*(?:\\S.*|\\R[ \\t]+-\\s+\\S.*)$");
         if (!pattern.matcher(frontmatter).find()) {
             throw new AgentException("SKILL.md 前言区缺少 " + field);
         }
@@ -266,5 +273,103 @@ public class SkillCodeLogic {
         } catch (IOException e) {
             throw new AgentException("500", "读取 NAS 草稿文件失败", e);
         }
+    }
+
+    /**
+     * 汇总 requirements.txt 与 SKILL.md 前言区 dependency 字段，序列化为 JSON 缓存。
+     * 格式：[{"name":"jinja2","versionConstraint":">=3.1.0","source":"requirements.txt"}, ...]
+     */
+    private String buildDependencySummary(Path draftRoot) {
+        StringBuilder json = new StringBuilder("[");
+        boolean first = true;
+        Path req = draftRoot.resolve("requirements.txt");
+        if (Files.isRegularFile(req)) {
+            for (Dependency dep : parseRequirements(readFile(req))) {
+                if (!first) json.append(",");
+                first = false;
+                json.append("{\"name\":\"").append(escape(dep.name))
+                        .append("\",\"versionConstraint\":\"").append(escape(dep.versionConstraint))
+                        .append("\",\"source\":\"requirements.txt\"}");
+            }
+        }
+        Path skillMd = draftRoot.resolve("SKILL.md");
+        if (Files.isRegularFile(skillMd)) {
+            for (Dependency dep : parseFrontmatterDependency(readFile(skillMd))) {
+                if (!first) json.append(",");
+                first = false;
+                json.append("{\"name\":\"").append(escape(dep.name))
+                        .append("\",\"versionConstraint\":\"").append(escape(dep.versionConstraint))
+                        .append("\",\"source\":\"SKILL.md\"}");
+            }
+        }
+        json.append("]");
+        return json.toString();
+    }
+
+    private String escape(String s) {
+        return s == null ? "" : s.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    private static final Pattern REQ_LINE = Pattern.compile("^\\s*([A-Za-z0-9_.\\-]+)\\s*(==|>=|<=|~=|!=|>|<)?\\s*([A-Za-z0-9_.\\-+*,]*)\\s*$");
+
+    /**
+     * 解析 requirements.txt：支持 package==1.0 / package>=1.0 / package / # 注释 / -r other.txt。
+     */
+    private List<Dependency> parseRequirements(String content) {
+        List<Dependency> deps = new java.util.ArrayList<>();
+        if (content == null) return deps;
+        for (String raw : content.split("\\R")) {
+            String line = raw.split("#")[0].trim();
+            if (line.isEmpty() || line.startsWith("-")) continue;
+            Matcher m = REQ_LINE.matcher(line);
+            if (!m.matches()) continue;
+            Dependency dep = new Dependency();
+            dep.name = m.group(1);
+            String op = m.group(2);
+            String ver = m.group(3);
+            dep.versionConstraint = (op != null && !op.isEmpty()) ? op + (ver == null ? "" : ver) : "";
+            deps.add(dep);
+        }
+        return deps;
+    }
+
+    /**
+     * 解析 SKILL.md 前言区 dependency 字段，格式：
+     * dependency:
+     *   python:
+     *     - jinja2>=3.1.0
+     */
+    private List<Dependency> parseFrontmatterDependency(String skillMd) {
+        List<Dependency> deps = new java.util.ArrayList<>();
+        if (skillMd == null) return deps;
+        Matcher fm = YAML_FRONTMATTER.matcher(skillMd);
+        if (!fm.find()) return deps;
+        String frontmatter = fm.group(1);
+        // 定位 dependency: 块，收集其下缩进的列表项
+        String[] lines = frontmatter.split("\\R");
+        boolean inDep = false;
+        for (String line : lines) {
+            if (line.matches("^\\s*dependency\\s*:.*")) { inDep = true; continue; }
+            if (inDep) {
+                // 遇到顶层（无缩进）非空行则结束 dependency 块
+                if (!line.isEmpty() && !line.startsWith(" ") && !line.startsWith("\t")) { inDep = false; continue; }
+                String item = line.replaceAll("^\\s*-\\s*", "").trim();
+                if (item.isEmpty()) continue;
+                Matcher m = REQ_LINE.matcher(item);
+                if (!m.matches()) continue;
+                Dependency dep = new Dependency();
+                dep.name = m.group(1);
+                String op = m.group(2);
+                String ver = m.group(3);
+                dep.versionConstraint = (op != null && !op.isEmpty()) ? op + (ver == null ? "" : ver) : "";
+                deps.add(dep);
+            }
+        }
+        return deps;
+    }
+
+    private static class Dependency {
+        String name;
+        String versionConstraint;
     }
 }

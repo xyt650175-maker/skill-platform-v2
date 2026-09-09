@@ -1,0 +1,2 @@
+deepagents==0.7.13
+langchain-openai==1.6.0

@@ -11,11 +11,11 @@
     </section>
 
     <div class="page-context">
-      <b>Badcase 优化闭环</b>　/　云虾版本定版
+      <b>Badcase 优化闭环</b>　/　平台版本定版
     </div>
 
     <section class="page-content">
-      <div class="notice">闭环工作台：Badcase → 提示词 / Skill 优化任务 → Candidate 验证 → 重新装配 → 原案例回归 → 云虾版本定版。</div>
+      <div class="notice">闭环流程：Badcase → 提示词 / Skill 优化任务 → Candidate 验证 → 重新装配 → 原案例回归 → 平台版本定版。</div>
 
       <div class="team-grid">
         <!-- Badcase #07 优化闭环 -->
@@ -45,9 +45,9 @@
           </div>
         </section>
 
-        <!-- 完整云虾版本 BOM -->
+        <!-- 完整平台版本 BOM -->
         <section class="panel">
-          <h3>完整云虾版本（BOM）</h3>
+          <h3>完整平台版本（BOM）</h3>
           <div class="pad">
             <div class="box">
               <b>v1.0-candidate · 基线</b>
@@ -67,7 +67,7 @@
 
       <!-- 定版门槛表 -->
       <section class="panel" style="margin-top:12px">
-        <h3>云虾版本定版门槛</h3>
+        <h3>平台版本定版门槛</h3>
         <table>
           <thead>
             <tr><th>检查项</th><th>门槛</th><th>v2.0 结果</th></tr>
@@ -103,7 +103,7 @@ const regressionBtn = ref('使用原 Badcase 回归')
 
 const promptMsg = ref('待创建产品比较 SubAgent Prompt Candidate。')
 const skillMsg = ref('待创建 product-search Skill Candidate，并进行单 Skill 测试。')
-const flowMsg = ref('两条 Candidate 均通过后，系统管理员才能装配云虾 v2.0 Candidate。')
+const flowMsg = ref('两条 Candidate 均通过后，系统管理员才能装配平台 v2.0 Candidate。')
 
 const regressionGate = computed(() => regressionDone.value ? '通过' : '待回归')
 const riskGate = computed(() => regressionDone.value ? '通过：0 个' : '待检查')
@@ -133,12 +133,12 @@ function assemble() {
   }
   assembled.value = true
   assembleBtn.value = 'v2.0 Candidate 已重新装配'
-  flowMsg.value = '已生成完整云虾 v2.0 Candidate，请使用原 Badcase #07 回归。'
+  flowMsg.value = '已生成完整平台 v2.0 Candidate，请使用原 Badcase #07 回归。'
 }
 
 function regression() {
   if (!assembled.value) {
-    flowMsg.value = '不能回归：请先重新装配云虾 v2.0 Candidate。'
+    flowMsg.value = '不能回归：请先重新装配平台 v2.0 Candidate。'
     return
   }
   regressionDone.value = true

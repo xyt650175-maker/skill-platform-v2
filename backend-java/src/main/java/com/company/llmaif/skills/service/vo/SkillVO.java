@@ -61,6 +61,31 @@ public class SkillVO {
     private String entryFile;
 
     /**
+     * 运行目标平台，逗号分隔
+     */
+    private String targetPlatforms;
+
+    /**
+     * 依赖摘要 JSON
+     */
+    private String dependencySummary;
+
+    /**
+     * 关联智能体 ID（从 skill_mounting 反查，可空）
+     */
+    private Long agentId;
+
+    /**
+     * 关联智能体名称
+     */
+    private String agentName;
+
+    /**
+     * 关联智能体版本
+     */
+    private String agentVersion;
+
+    /**
      * 创建人ID
      */
     private Long creatorId;

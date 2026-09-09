@@ -15,6 +15,11 @@ export interface Skill {
   author: string
   visibility?: 'private' | 'team'
   tags?: string[]
+  target_platforms?: string
+  dependency_summary?: string
+  agent_id?: number | string
+  agent_name?: string
+  agent_version?: string
   created_at: string
   updated_at: string
 }
@@ -30,6 +35,11 @@ interface PlatformSkill {
   entryFile?: string
   creatorName?: string
   visibility?: 'private' | 'team'
+  targetPlatforms?: string
+  dependencySummary?: string
+  agentId?: number
+  agentName?: string
+  agentVersion?: string
   createTime?: string
   updateTime?: string
 }
@@ -45,6 +55,11 @@ const toSkill = (skill: PlatformSkill): Skill => ({
   code_path: skill.gitRepoPath,
   author: skill.creatorName || '',
   visibility: skill.visibility || 'private',
+  target_platforms: skill.targetPlatforms || '',
+  dependency_summary: skill.dependencySummary || '',
+  agent_id: skill.agentId,
+  agent_name: skill.agentName || '',
+  agent_version: skill.agentVersion || '',
   created_at: skill.createTime || '',
   updated_at: skill.updateTime || '',
 })
@@ -176,6 +191,10 @@ export const skillApi = {
     entryFile: data.entry_file,
     visibility: data.visibility === 'team' ? 'team' : 'private',
     version: data.version,
+    agentId: data.agent_id ? Number(data.agent_id) : undefined,
+    agentVersion: data.agent_version || undefined,
+    skillAlias: data.name,
+    targetPlatforms: data.target_platforms || undefined,
     }) as PlatformSkill)
   },
   update: async (id: string, data: Partial<Skill>) => {
@@ -194,6 +213,7 @@ export const skillApi = {
     gitRepoPath: data.code_path,
     status: data.status,
     entryFile: data.entry_file,
+    targetPlatforms: data.target_platforms,
     }) as PlatformSkill)
   },
   delete: async (id: string) => {
@@ -250,6 +270,9 @@ export const skillApi = {
   finalizeVersion: async (id: string, version: string) => {
     if (isLocalDemo()) return skillApi.update(id, { version })
     await request.put(`/skills/${id}/version`, null, { params: { version } })
+  },
+  updateAgentBinding: async (id: string, agentId: string | number | null, agentVersion: string) => {
+    await request.put(`/skills/${id}/agent-binding`, null, { params: { agentId: agentId || '', agentVersion: agentVersion || '' } })
   },
   submitReview: async (id: string, debugResult?: Record<string, any>) => request.post(`/skills/${id}/reviews`, debugResult || {}) as Promise<SkillReview>,
   listReviews: async (status?: string) => request.get('/skills/reviews', { params: { status } }) as Promise<SkillReview[]>,

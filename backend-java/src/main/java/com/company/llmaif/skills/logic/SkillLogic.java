@@ -4,9 +4,14 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.company.llmaif.common.AgentException;
 import com.company.llmaif.common.git.GitService;
 import com.company.llmaif.config.LlmaifProperties;
+import com.company.llmaif.skills.dao.AgentDAO;
+import com.company.llmaif.skills.dao.AgentVersionDAO;
 import com.company.llmaif.skills.dao.SkillDAO;
+import com.company.llmaif.skills.dao.SkillMountingDAO;
+import com.company.llmaif.skills.dao.entity.AgentEntity;
 import com.company.llmaif.skills.dao.entity.SkillEntity;
 import com.company.llmaif.skills.dao.SkillReviewDAO;
+import com.company.llmaif.skills.dao.entity.SkillMountingEntity;
 import com.company.llmaif.skills.dao.entity.SkillReviewEntity;
 import com.company.llmaif.skills.enums.SkillStatusEnum;
 import com.company.llmaif.skills.service.vo.*;
@@ -33,6 +38,9 @@ public class SkillLogic {
     private final OperationLogLogic operationLogLogic;
     private final SkillVersionLogic skillVersionLogic;
     private final LlmaifProperties properties;
+    private final SkillMountingDAO skillMountingDAO;
+    private final AgentDAO agentDAO;
+    private final AgentVersionDAO agentVersionDAO;
 
     /**
      * 创建 Skill
@@ -43,6 +51,21 @@ public class SkillLogic {
         SkillEntity existing = skillDAO.selectByName(dto.getName());
         if (existing != null) {
             throw new AgentException("Skill 名称已存在");
+        }
+
+        // 在创建 Git 工作区前校验挂载目标，避免无效版本留下孤立仓库。
+        if (dto.getAgentId() != null) {
+            if (StringUtils.isBlank(dto.getAgentVersion())) {
+                throw new AgentException("智能体版本不能为空");
+            }
+            if (agentDAO.selectById(dto.getAgentId()) == null) {
+                throw new AgentException("关联的智能体不存在：" + dto.getAgentId());
+            }
+            if (agentVersionDAO.selectByAgentIdAndVersion(dto.getAgentId(), dto.getAgentVersion()) == null) {
+                throw new AgentException("关联的智能体版本不存在：" + dto.getAgentVersion());
+            }
+        } else if (StringUtils.isNotBlank(dto.getAgentVersion())) {
+            throw new AgentException("选择智能体版本前请先选择智能体");
         }
 
         // 构建实体
@@ -58,6 +81,7 @@ public class SkillLogic {
         // Skill 不允许公开；仅可创建为私有或团队可见，服务端同样兜底防止绕过前端。
         entity.setVisibility("team".equals(dto.getVisibility()) ? "team" : "private");
         entity.setCreatorId(creatorId);
+        entity.setTargetPlatforms(dto.getTargetPlatforms());
 
         skillDAO.insert(entity);
         try {
@@ -69,6 +93,18 @@ public class SkillLogic {
         } catch (RuntimeException e) {
             gitService.deleteSkillRepository(entity);
             throw e;
+        }
+
+        // 若指定了智能体及版本，创建后自动建立 skill_mounting 挂载关系。
+        // skill 与 agent 本就是多对多关联表模型，这里只是省去用户再去智能体中心手动挂载。
+        if (dto.getAgentId() != null && StringUtils.isNotBlank(dto.getAgentVersion())) {
+            SkillMountingEntity mounting = new SkillMountingEntity();
+            mounting.setAgentId(dto.getAgentId());
+            mounting.setSkillId(entity.getId());
+            mounting.setSkillAlias(StringUtils.defaultIfBlank(dto.getSkillAlias(), entity.getName()));
+            mounting.setAgentVersion(dto.getAgentVersion());
+            mounting.setEnabled(1);
+            skillMountingDAO.insert(mounting);
         }
 
         return convertToVO(entity);
@@ -101,10 +137,56 @@ public class SkillLogic {
             validateStatusTransition(entity.getStatus(), dto.getStatus());
             entity.setStatus(dto.getStatus());
         }
+        // targetPlatforms 允许清空，故用 null 判断而非 isNotBlank
+        if (dto.getTargetPlatforms() != null) {
+            entity.setTargetPlatforms(dto.getTargetPlatforms());
+        }
 
         skillDAO.updateById(entity);
 
         return convertToVO(entity);
+    }
+
+    /**
+     * 二次开发时更换 Skill 关联的智能体及版本。
+     * 一个 Skill 可能挂载到多个智能体，这里只维护“主关联”（首条 mounting）：
+     * 清空该 skill 的全部挂载，再按新选择建立一条。保持多对多模型的同时，
+     * 给前端一个简单的“换绑”入口。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void updateAgentBinding(Long skillId, Long agentId, String agentVersion) {
+        SkillEntity skill = skillDAO.selectById(skillId);
+        if (skill == null) {
+            throw new AgentException("Skill 不存在");
+        }
+        // 清空该 skill 现有挂载
+        List<SkillMountingEntity> existing = skillMountingDAO.selectBySkillId(skillId);
+        if (existing != null) {
+            for (SkillMountingEntity m : existing) {
+                skillMountingDAO.deleteById(m.getId());
+            }
+        }
+        // agentId 为空表示解除关联
+        if (agentId == null) {
+            return;
+        }
+        AgentEntity agent = agentDAO.selectById(agentId);
+        if (agent == null) {
+            throw new AgentException("智能体不存在：" + agentId);
+        }
+        if (StringUtils.isBlank(agentVersion)) {
+            throw new AgentException("智能体版本不能为空");
+        }
+        if (agentVersionDAO.selectByAgentIdAndVersion(agentId, agentVersion) == null) {
+            throw new AgentException("智能体版本不存在：" + agentVersion);
+        }
+        SkillMountingEntity mounting = new SkillMountingEntity();
+        mounting.setAgentId(agentId);
+        mounting.setSkillId(skillId);
+        mounting.setSkillAlias(skill.getName());
+        mounting.setAgentVersion(agentVersion);
+        mounting.setEnabled(1);
+        skillMountingDAO.insert(mounting);
     }
 
     /**
@@ -360,9 +442,24 @@ public class SkillLogic {
         vo.setStatus(entity.getStatus());
         vo.setVisibility(StringUtils.defaultIfBlank(entity.getVisibility(), "private"));
         vo.setEntryFile(entity.getEntryFile());
+        vo.setTargetPlatforms(entity.getTargetPlatforms());
+        vo.setDependencySummary(entity.getDependencySummary());
         vo.setCreatorId(entity.getCreatorId());
         vo.setCreateTime(entity.getCreateTime());
         vo.setUpdateTime(entity.getUpdateTime());
+
+        // 反查 skill_mounting，回显首个关联智能体（一个 skill 可能挂到多个 agent，
+        // 这里取最近一条用于列表/详情页展示，完整挂载关系在智能体中心查看）。
+        List<SkillMountingEntity> mountings = skillMountingDAO.selectBySkillId(entity.getId());
+        if (mountings != null && !mountings.isEmpty()) {
+            SkillMountingEntity mounting = mountings.get(0);
+            vo.setAgentId(mounting.getAgentId());
+            vo.setAgentVersion(mounting.getAgentVersion());
+            AgentEntity agent = agentDAO.selectById(mounting.getAgentId());
+            if (agent != null) {
+                vo.setAgentName(agent.getName());
+            }
+        }
 
         // 状态描述
         SkillStatusEnum statusEnum = SkillStatusEnum.fromCode(entity.getStatus());

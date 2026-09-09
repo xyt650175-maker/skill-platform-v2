@@ -48,4 +48,24 @@ public class CreateSkillDTO {
      * 可见范围：public/private/team
      */
     private String visibility = "private";
+
+    /**
+     * 创建后自动挂载到的智能体（可选）
+     */
+    private Long agentId;
+
+    /**
+     * 挂载的智能体版本（可选，与 agentId 同时出现）
+     */
+    private String agentVersion;
+
+    /**
+     * 挂载别名（可选，默认用 skill name）
+     */
+    private String skillAlias;
+
+    /**
+     * 运行目标平台，逗号分隔，如 x86_64,arm64
+     */
+    private String targetPlatforms;
 }

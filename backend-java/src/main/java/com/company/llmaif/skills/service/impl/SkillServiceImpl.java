@@ -49,6 +49,11 @@ public class SkillServiceImpl implements ISkillService {
     }
 
     @Override
+    public void updateAgentBinding(Long id, Long agentId, String agentVersion) {
+        skillLogic.updateAgentBinding(id, agentId, agentVersion);
+    }
+
+    @Override
     public SkillReviewVO submitReview(Long id, Long applicantId, java.util.Map<String, Object> debugResult) {
         return skillLogic.submitReview(id, applicantId, debugResult);
     }

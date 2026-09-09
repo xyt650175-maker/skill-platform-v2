@@ -52,10 +52,17 @@
         <aside class="panel">
           <h3>新建评测任务</h3>
           <div class="pad">
-            <label class="label">智能体版本</label>
-            <select class="input" v-model="selectedAgentId">
+            <label class="label">选择智能体</label>
+            <select class="input" v-model="selectedAgentId" @change="loadSelectedAgentVersions">
               <option value="">— 选择智能体 —</option>
-              <option v-for="agent in agents" :key="agent.id" :value="agent.id">{{ agent.name }} ({{ agent.current_version }})</option>
+              <option v-for="agent in agents" :key="agent.id" :value="agent.id">{{ agent.name }}</option>
+            </select>
+            <label class="label">选择智能体版本</label>
+            <select class="input" v-model="selectedAgentVersion" :disabled="!selectedAgentId || versionsLoading">
+              <option value="">{{ versionsLoading ? '版本加载中…' : '— 选择版本 —' }}</option>
+              <option v-for="item in selectedAgentVersions" :key="item.version" :value="item.version">
+                {{ item.version }}{{ item.changeSummary ? ` · ${item.changeSummary}` : '' }}
+              </option>
             </select>
             <label class="label">测评集版本</label>
             <select class="input" v-model="datasetKey" @change="selectDataset">
@@ -68,7 +75,7 @@
               <option>全部 Case</option>
               <option>仅 P0 Case</option>
             </select>
-            <button class="btn primary" style="margin-top:12px;width:100%" @click="createEval" :disabled="!selectedAgentId">提交批量评测</button>
+            <button class="btn primary" style="margin-top:12px;width:100%" @click="createEval" :disabled="!selectedAgentId || !selectedAgentVersion">提交批量评测</button>
             <div class="hint">{{ createResult }}</div>
           </div>
         </aside>
@@ -168,11 +175,14 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { agentApi, evalApi, skillApi, type Agent, type EvalTask, type Skill } from '@/api'
+import { agentApi, evalApi, skillApi, type Agent, type AgentVersion, type EvalTask, type Skill } from '@/api'
 
 const evalTasks = ref<EvalTask[]>([])
 const agents = ref<Agent[]>([])
 const selectedAgentId = ref('')
+const selectedAgentVersion = ref('')
+const selectedAgentVersions = ref<AgentVersion[]>([])
+const versionsLoading = ref(false)
 
 const datasets = [
   { key: 'regression', name: '业务回归集', role: '智能体', cases: 80, version: 'v1.2', source: '业务案例 + Badcase' },
@@ -218,7 +228,7 @@ async function createEval() {
     const task = await evalApi.create({
       name: `${agent.name} · ${datasetInfo[datasetKey.value].name}`,
       agentId: agent.id,
-      agentVersion: agent.current_version,
+      agentVersion: selectedAgentVersion.value,
       datasetKey: datasetKey.value,
       datasetVersion: datasetInfo[datasetKey.value].name,
       scope: 'all',
@@ -226,6 +236,25 @@ async function createEval() {
     evalTasks.value.unshift(task)
     createResult.value = `已创建评测任务 #${task.id}，状态为待执行。平台不会伪造“已完成”结果。`
   } catch (error: any) { createResult.value = `创建失败：${error.message}` }
+}
+
+async function loadSelectedAgentVersions() {
+  selectedAgentVersion.value = ''
+  selectedAgentVersions.value = []
+  if (!selectedAgentId.value) return
+  versionsLoading.value = true
+  try {
+    selectedAgentVersions.value = await agentApi.listVersions(selectedAgentId.value)
+    const selectedAgent = agents.value.find(agent => agent.id === selectedAgentId.value)
+    const currentVersion = selectedAgent?.current_version || selectedAgent?.currentVersion
+    selectedAgentVersion.value = selectedAgentVersions.value.find(item => item.version === currentVersion)?.version
+      || selectedAgentVersions.value[0]?.version
+      || ''
+  } catch (error: any) {
+    createResult.value = `加载智能体版本失败：${error.message}`
+  } finally {
+    versionsLoading.value = false
+  }
 }
 
 function statusLabel(status: string) { return ({ pending: '待执行', running: '运行中', completed: '已完成', failed: '失败' } as Record<string, string>)[status] || status }
@@ -258,6 +287,10 @@ onMounted(async () => {
   try {
     const [skills, taskList, agentList] = await Promise.all([skillApi.list(), evalApi.list(), agentApi.list()])
     skillList.value = skills; evalTasks.value = taskList; agents.value = agentList
+    if (agents.value.length) {
+      selectedAgentId.value = agents.value[0].id
+      await loadSelectedAgentVersions()
+    }
   } catch (error: any) { createResult.value = `加载评测数据失败：${error.message}` }
 })
 

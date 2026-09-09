@@ -39,6 +39,11 @@ llmaif:
     api-key: ${LOCAL_LLM_API_KEY:}
     api-key-required: true
     default-model: ${LOCAL_LLM_MODEL:qwen3.7-max}
+  deep-agent:
+    enabled: true
+    python-executable: ${DEEPAGENT_PYTHON:./.deepagent-venv/bin/python}
+    runtime-script: ${DEEPAGENT_RUNTIME_SCRIPT:./deepagent-runtime/runtime.py}
+    timeout-seconds: 300
 
 management:
   health:

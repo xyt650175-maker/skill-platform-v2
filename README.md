@@ -7,7 +7,7 @@
 | 目录 | 说明 |
 | --- | --- |
 | `frontend-vite/` | Vue 3 + TypeScript + Vite 前端应用 |
-| `backend-java/` | Spring Boot + MyBatis-Plus 后端服务 |
+| `backend-java/` | Spring Boot 业务后端及 Python DeepAgent 运行时 |
 | `docs/` | 产品设计、工程架构、使用手册和测试报告 |
 | `scripts/` | 本地验证脚本 |
 
@@ -15,14 +15,15 @@
 
 - **技能管理**：按范围管理个人与团队 Skill，查看状态、版本和基本信息。
 - **技能开发**：在线创建、本地 ZIP 导入、企业 Git 导入；支持关联智能体及其版本。
-- **AI 生成与迭代**：通过兼容 OpenAI 协议的模型服务生成或持续修改 `SKILL.md`、`requirements.txt`、`references/`、`scripts/` 中的文件。
-- **调试与日志**：基于测试模板或业务测试数据运行单例/全量用例，展示输出、失败日志和 Token 消耗。
+- **AI 生成与迭代**：后端启动真实 Deep Agents SDK 运行时，由 Skill Creator 通过隔离文件系统工具生成或持续修改 `SKILL.md` 及按需资源。
+- **调试与日志**：基于内置 Mock 数据或当前 Skill 测试数据运行单例/全量用例，展示输出、失败日志和 Token 消耗。
 - **版本与 Git**：草稿保存、提交评审、版本历史、企业内网 Git 仓库连接与导入。
 
 ## 技术栈
 
 - 前端：Vue 3、TypeScript、Vite、Pinia、Element Plus、CodeMirror。
 - 后端：Java 8、Spring Boot 2.7、MyBatis-Plus、H2（本地联调）/ TDSQL MySQL（生产）、Redis、JGit。
+- Agent 运行时：Python 3.11+、Deep Agents SDK、LangChain OpenAI；Skill Creator 通过 `FilesystemBackend` 操作隔离工作区。
 - 模型服务：OpenAI 兼容接口；默认配置支持本机 Ollama，也可通过环境变量指向企业模型网关。
 
 ## 本地启动
@@ -41,6 +42,7 @@ npm run dev
 
 ```bash
 cd backend-java
+./deepagent-runtime/install.sh
 mvn spring-boot:run
 ```
 
@@ -60,7 +62,7 @@ export LOCAL_LLM_API_KEY=ollama
 export LOCAL_LLM_MODEL=qwen2.5:3b
 ```
 
-使用企业模型网关时，设置 `LOCAL_LLM_BASE_URL`、`LOCAL_LLM_API_KEY` 和 `LOCAL_LLM_MODEL` 后再启动后端。
+使用企业模型网关时，设置 `LOCAL_LLM_BASE_URL`、`LOCAL_LLM_API_KEY` 和 `LOCAL_LLM_MODEL` 后再启动后端。Skill 创建请求不会由 Java 直接调用聊天补全接口，而是把这组模型配置传递给 DeepAgent 运行时。
 
 ## 验证
 
